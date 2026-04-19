@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+
+# Build output
+dist/
+coverage/
+apps/*/dist/
+packages/*/dist/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Runtime state
+apps/api/data/telegram-state.json
+apps/api/data/notification-settings.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

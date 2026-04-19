@@ -1,0 +1,22 @@
+{
+  "name": "telegramchick",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/shared"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d mysql",
+    "db:down": "docker compose down",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "npm run dev --workspace apps/api",
+    "build:shared": "npm run build --workspace packages/shared",
+    "build:web": "npm run build --workspace apps/web",
+    "build:api": "npm run build --workspace apps/api"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
