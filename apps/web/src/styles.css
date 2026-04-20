@@ -519,6 +519,10 @@ label {
   gap: 14px;
 }
 
+.settingsPanelWide {
+  grid-column: 1 / -1;
+}
+
 .settingsActions {
   display: flex;
   flex-wrap: wrap;

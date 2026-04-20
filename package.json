@@ -13,8 +13,10 @@
     "dev:web": "npm run dev --workspace apps/web",
     "dev:api": "npm run dev --workspace apps/api",
     "build:shared": "npm run build --workspace packages/shared",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
     "build:web": "npm run build --workspace apps/web",
-    "build:api": "npm run build --workspace apps/api"
+    "build:api": "npm run build --workspace apps/api",
+    "start": "node apps/api/dist/server.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2"

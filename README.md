@@ -114,3 +114,15 @@ npm run build:shared
 npm run build:api
 npm run build:web
 ```
+
+## Deploy
+
+Поточний рекомендований варіант деплою:
+
+- один `app` service у `Railway` для `web + api`
+- окремий `PostgreSQL` service у тому ж Railway project
+
+Ключові файли:
+
+- `docs/railway-single-service.md`
+- `docs/railway-postgres.md`

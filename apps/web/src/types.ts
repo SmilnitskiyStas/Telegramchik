@@ -14,10 +14,12 @@ export type Product = {
   imageUrl?: string;
   batch: string;
   storeId: string;
+  storeName?: string;
   quantity: number;
   receivedAt: string;
   expiresAt: string;
   status: ProductStatus;
   notes: string;
   receivedByUserId: string;
+  receiverFullName?: string;
 };

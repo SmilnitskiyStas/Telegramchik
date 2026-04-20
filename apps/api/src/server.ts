@@ -1,6 +1,7 @@
 ﻿import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -24,6 +25,22 @@ import {
   findJoinedProductByBatchId,
   getJoinedProducts
 } from "./data.js";
+import { hasDatabase } from "./db.js";
+import {
+  createProduct as createProductInDatabase,
+  getEmployeeById as getEmployeeByIdFromDatabase,
+  getEmployeeByChatId as getEmployeeByChatIdFromDatabase,
+  getEmployees as getEmployeesFromDatabase,
+  getNotificationSettings as getNotificationSettingsFromDatabase,
+  getProductByBatchId as getProductByBatchIdFromDatabase,
+  getProducts as getProductsFromDatabase,
+  getStores as getStoresFromDatabase,
+  getTelegramState as getTelegramStateFromDatabase,
+  insertNotificationLog,
+  saveNotificationSettings as saveNotificationSettingsToDatabase,
+  saveTelegramState as saveTelegramStateToDatabase,
+  updateProductStatus as updateProductStatusInDatabase,
+} from "./postgres-store.js";
 import { Product, ProductStatus } from "./types.js";
 
 type TelegramUpdate = {
@@ -42,6 +59,11 @@ type TelegramReplyMarkup = {
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFilePath);
+const webDistCandidates = [
+  path.resolve(process.cwd(), "apps/web/dist"),
+  path.resolve(currentDir, "../../web/dist"),
+  path.resolve(currentDir, "../../../apps/web/dist")
+];
 const envCandidates = [
   path.resolve(process.cwd(), ".env"),
   path.resolve(currentDir, "../.env"),
@@ -57,12 +79,14 @@ for (const envPath of envCandidates) {
 }
 
 const app = express();
-const port = 3001;
+const port = Number(process.env.PORT || 3001);
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const defaultTelegramChatId = process.env.TELEGRAM_CHAT_ID ?? "";
-const appUrl = process.env.APP_URL ?? "http://localhost:5173";
+const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
 let notificationSettings = readSettings(defaultTelegramChatId);
 let telegramState = readTelegramState();
+const webDistPath = webDistCandidates.find((candidate) => fs.existsSync(candidate));
+const databaseEnabled = hasDatabase();
 
 app.use(cors());
 app.use(express.json());
@@ -73,13 +97,41 @@ function ensureTelegramConfigured() {
   }
 }
 
-function persistSettings(nextSettings: NotificationSettings) {
+async function loadNotificationSettings() {
+  if (!databaseEnabled) {
+    return notificationSettings;
+  }
+
+  notificationSettings = await getNotificationSettingsFromDatabase(defaultTelegramChatId);
+  return notificationSettings;
+}
+
+async function persistSettings(nextSettings: NotificationSettings) {
   notificationSettings = nextSettings;
+  if (databaseEnabled) {
+    await saveNotificationSettingsToDatabase(nextSettings);
+    return;
+  }
+
   writeSettings(nextSettings);
 }
 
-function persistTelegramState(lastUpdateId: number) {
+async function loadTelegramState() {
+  if (!databaseEnabled) {
+    return telegramState;
+  }
+
+  telegramState = await getTelegramStateFromDatabase();
+  return telegramState;
+}
+
+async function persistTelegramState(lastUpdateId: number) {
   telegramState = { lastUpdateId };
+  if (databaseEnabled) {
+    await saveTelegramStateToDatabase(telegramState);
+    return;
+  }
+
   writeTelegramState(telegramState);
 }
 
@@ -134,11 +186,11 @@ function canUseTelegramUrl(url: string) {
 }
 
 function getProductReceiverName(product: Product) {
-  return findEmployeeById(product.receivedByUserId)?.fullName ?? "—";
+  return product.receiverFullName ?? findEmployeeById(product.receivedByUserId)?.fullName ?? "—";
 }
 
 function getProductStoreName(product: Product) {
-  return findStoreById(product.storeId)?.name ?? "—";
+  return product.storeName ?? findStoreById(product.storeId)?.name ?? "—";
 }
 
 function buildProductNotification(product: Product) {
@@ -202,11 +254,11 @@ function getCurrentTimeKey() {
   return `${hours}:${minutes}`;
 }
 
-function getProductsForNotification(daysBefore: number) {
+async function getProductsForNotification(daysBefore: number) {
   const now = new Date();
-  const products = getJoinedProducts();
+  const products = databaseEnabled ? await getProductsFromDatabase() : getJoinedProducts();
 
-  return products.filter((product) => {
+  return products.filter((product: Product) => {
     const expiresAt = new Date(product.expiresAt);
     const diffDays = Math.ceil(
       (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
@@ -237,34 +289,36 @@ function buildReceiveLink(chatId: string) {
 }
 
 async function runAutomaticNotificationCheck() {
-  if (!notificationSettings.enabled || !notificationSettings.chatId) {
+  const currentSettings = await loadNotificationSettings();
+
+  if (!currentSettings.enabled || !currentSettings.chatId) {
     return;
   }
 
   const today = getTodayKey();
 
-  if (notificationSettings.lastSentDate === today) {
+  if (currentSettings.lastSentDate === today) {
     return;
   }
 
-  if (getCurrentTimeKey() !== notificationSettings.time) {
+  if (getCurrentTimeKey() !== currentSettings.time) {
     return;
   }
 
-  const items = getProductsForNotification(notificationSettings.daysBefore);
+  const items = await getProductsForNotification(currentSettings.daysBefore);
   if (!items.length) {
     return;
   }
 
   try {
     await sendTelegramMessage(
-      notificationSettings.chatId,
-      buildDigestMessage(items, notificationSettings.daysBefore),
+      currentSettings.chatId,
+      buildDigestMessage(items, currentSettings.daysBefore),
       getSystemReplyMarkup(),
     );
 
-    persistSettings({
-      ...notificationSettings,
+    await persistSettings({
+      ...currentSettings,
       lastSentDate: today
     });
   } catch (error) {
@@ -277,10 +331,12 @@ async function processTelegramCommands() {
     return;
   }
 
+  const currentTelegramState = await loadTelegramState();
+
   try {
     const fetchUpdates = async () => {
-      const query = telegramState.lastUpdateId
-        ? `getUpdates?offset=${telegramState.lastUpdateId + 1}`
+      const query = currentTelegramState.lastUpdateId
+        ? `getUpdates?offset=${currentTelegramState.lastUpdateId + 1}`
         : "getUpdates";
 
       return telegramRequest(query) as Promise<TelegramUpdate[]>;
@@ -309,7 +365,7 @@ async function processTelegramCommands() {
       const chatId = update.message?.chat?.id;
 
       if (typeof update.update_id === "number") {
-        persistTelegramState(update.update_id);
+        await persistTelegramState(update.update_id);
       }
 
       if (!text || typeof chatId !== "number") {
@@ -346,20 +402,25 @@ app.get("/health", (_request, response) => {
   response.json({ ok: true });
 });
 
-app.get("/products", (_request, response) => {
-  response.json(getJoinedProducts());
+app.get("/products", async (_request, response) => {
+  const products = databaseEnabled ? await getProductsFromDatabase() : getJoinedProducts();
+  response.json(products);
 });
 
-app.get("/employees", (_request, response) => {
-  response.json(employees);
+app.get("/employees", async (_request, response) => {
+  const nextEmployees = databaseEnabled ? await getEmployeesFromDatabase() : employees;
+  response.json(nextEmployees);
 });
 
-app.get("/stores", (_request, response) => {
-  response.json(stores);
+app.get("/stores", async (_request, response) => {
+  const nextStores = databaseEnabled ? await getStoresFromDatabase() : stores;
+  response.json(nextStores);
 });
 
-app.get("/employees/by-chat/:chatId", (request, response) => {
-  const employee = findEmployeeByChatId(request.params.chatId);
+app.get("/employees/by-chat/:chatId", async (request, response) => {
+  const employee = databaseEnabled
+    ? await getEmployeeByChatIdFromDatabase(request.params.chatId)
+    : findEmployeeByChatId(request.params.chatId);
 
   if (!employee) {
     response.status(404).json({ message: "Employee not found" });
@@ -369,19 +430,43 @@ app.get("/employees/by-chat/:chatId", (request, response) => {
   response.json(employee);
 });
 
-app.post("/products", (request, response) => {
+app.post("/products", async (request, response) => {
   const body = request.body as Omit<Product, "id" | "status">;
-  const receiver = findEmployeeById(String(body.receivedByUserId ?? "").trim());
-  const storeId = String(body.storeId ?? "").trim() || receiver?.storeId || "";
-  const store = findStoreById(storeId);
+  const receiver = databaseEnabled
+    ? await getEmployeeByIdFromDatabase(String(body.receivedByUserId ?? "").trim())
+    : null;
+  const fallbackReceiver = findEmployeeById(String(body.receivedByUserId ?? "").trim());
+  const resolvedReceiver = receiver ?? fallbackReceiver;
+  const storeId = String(body.storeId ?? "").trim() || resolvedReceiver?.storeId || "";
+  const store = databaseEnabled
+    ? (await getStoresFromDatabase()).find((item: { id: string }) => item.id === storeId) ?? null
+    : findStoreById(storeId);
 
-  if (!receiver) {
+  if (!resolvedReceiver) {
     response.status(400).json({ message: "Received by user is required" });
     return;
   }
 
   if (!store) {
     response.status(400).json({ message: "Store is required" });
+    return;
+  }
+
+  if (databaseEnabled) {
+    const created = await createProductInDatabase({
+      name: String(body.name ?? "").trim(),
+      category: String(body.category ?? "").trim(),
+      barcode: String(body.barcode ?? "").trim(),
+      batch: String(body.batch ?? "").trim(),
+      storeId: store.id,
+      quantity: Number(body.quantity),
+      receivedAt: body.receivedAt,
+      expiresAt: body.expiresAt,
+      notes: body.notes ?? "",
+      receivedByUserId: resolvedReceiver.id,
+    });
+
+    response.status(201).json(created);
     return;
   }
 
@@ -405,11 +490,11 @@ app.post("/products", (request, response) => {
     expiresAt: body.expiresAt,
     status: "нове",
     notes: body.notes ?? "",
-    receivedByUserId: receiver.id,
+    receivedByUserId: resolvedReceiver.id,
   });
 
   touchEmployeeActivity(
-    receiver.telegramClientId,
+    resolvedReceiver.telegramClientId,
     `Додав нову партію товару: ${catalogItem.name}`,
   );
   response.status(201).json({
@@ -418,9 +503,21 @@ app.post("/products", (request, response) => {
   });
 });
 
-app.patch("/products/:id/status", (request, response) => {
+app.patch("/products/:id/status", async (request, response) => {
   const { id } = request.params;
   const { status } = request.body as { status: ProductStatus };
+  if (databaseEnabled) {
+    const updated = await updateProductStatusInDatabase(id, status);
+
+    if (!updated) {
+      response.status(404).json({ message: "Product not found" });
+      return;
+    }
+
+    response.json(updated);
+    return;
+  }
+
   const product = findJoinedProductByBatchId(id);
   const batch = findBatchById(id);
 
@@ -443,12 +540,13 @@ app.patch("/products/:id/status", (request, response) => {
 
 app.get("/telegram/status", async (_request, response) => {
   try {
+    const currentSettings = await loadNotificationSettings();
     const result = await telegramRequest("getMe");
     response.json({
       ok: true,
       configured: true,
       bot: result,
-      defaultChatId: notificationSettings.chatId || defaultTelegramChatId,
+      defaultChatId: currentSettings.chatId || defaultTelegramChatId,
       receivePathExample: `${appUrl}/receive?clientId=123456`
     });
   } catch (error) {
@@ -492,25 +590,27 @@ app.post("/telegram/poll-commands", async (_request, response) => {
   response.json({ ok: true });
 });
 
-app.get("/notification-settings", (_request, response) => {
+app.get("/notification-settings", async (_request, response) => {
+  const currentSettings = await loadNotificationSettings();
   response.json({
     ok: true,
-    settings: notificationSettings
+    settings: currentSettings
   });
 });
 
-app.put("/notification-settings", (request, response) => {
+app.put("/notification-settings", async (request, response) => {
   const body = request.body as Partial<NotificationSettings>;
+  const currentSettings = await loadNotificationSettings();
 
   const nextSettings: NotificationSettings = {
     enabled: Boolean(body.enabled),
     chatId: String(body.chatId ?? "").trim(),
     time: String(body.time ?? "08:00"),
     daysBefore: Math.max(1, Number(body.daysBefore ?? 7)),
-    lastSentDate: notificationSettings.lastSentDate
+    lastSentDate: currentSettings.lastSentDate
   };
 
-  persistSettings(nextSettings);
+  await persistSettings(nextSettings);
   response.json({ ok: true, settings: nextSettings });
 });
 
@@ -520,7 +620,8 @@ app.post("/telegram/test", async (request, response) => {
     message?: string;
   };
 
-  const targetChatId = chatId || notificationSettings.chatId || defaultTelegramChatId;
+  const currentSettings = await loadNotificationSettings();
+  const targetChatId = chatId || currentSettings.chatId || defaultTelegramChatId;
 
   if (!targetChatId) {
     response.status(400).json({ ok: false, message: "chatId is required" });
@@ -543,9 +644,11 @@ app.post("/telegram/test", async (request, response) => {
   }
 });
 
-app.post("/telegram/preview/:id", (request, response) => {
+app.post("/telegram/preview/:id", async (request, response) => {
   const { id } = request.params;
-  const product = findJoinedProductByBatchId(id);
+  const product = databaseEnabled
+    ? await getProductByBatchIdFromDatabase(id)
+    : findJoinedProductByBatchId(id);
 
   if (!product) {
     response.status(404).json({ message: "Product not found" });
@@ -566,8 +669,11 @@ app.post("/telegram/preview/:id", (request, response) => {
 app.post("/telegram/notify/:id", async (request, response) => {
   const { id } = request.params;
   const { chatId } = request.body as { chatId?: string };
-  const product = findJoinedProductByBatchId(id);
-  const targetChatId = chatId || notificationSettings.chatId || defaultTelegramChatId;
+  const product = databaseEnabled
+    ? await getProductByBatchIdFromDatabase(id)
+    : findJoinedProductByBatchId(id);
+  const currentSettings = await loadNotificationSettings();
+  const targetChatId = chatId || currentSettings.chatId || defaultTelegramChatId;
 
   if (!product) {
     response.status(404).json({ ok: false, message: "Product not found" });
@@ -587,6 +693,16 @@ app.post("/telegram/notify/:id", async (request, response) => {
         ? buildProductReplyMarkup(product.id)
         : undefined,
     );
+    if (databaseEnabled) {
+      await insertNotificationLog({
+        batchId: product.id,
+        productId: product.productId,
+        storeId: product.storeId,
+        userId: product.receivedByUserId || null,
+        notificationType: "manual_product_notification",
+        messageText: buildProductNotification(product),
+      });
+    }
     response.json({ ok: true });
   } catch (error) {
     response.status(400).json({
@@ -596,14 +712,38 @@ app.post("/telegram/notify/:id", async (request, response) => {
   }
 });
 
-setInterval(() => {
-  void runAutomaticNotificationCheck();
-}, 60 * 1000);
+if (webDistPath) {
+  app.use(express.static(webDistPath));
 
-setInterval(() => {
-  void processTelegramCommands();
-}, 15 * 1000);
+  app.get("*", (request, response, next) => {
+    if (request.path.startsWith("/products")) return next();
+    if (request.path.startsWith("/employees")) return next();
+    if (request.path.startsWith("/stores")) return next();
+    if (request.path.startsWith("/telegram")) return next();
+    if (request.path.startsWith("/notification-settings")) return next();
+    if (request.path.startsWith("/health")) return next();
 
-app.listen(port, () => {
-  console.log(`API started on http://localhost:${port}`);
-});
+    response.sendFile(path.join(webDistPath, "index.html"));
+  });
+}
+
+async function bootstrap() {
+  if (databaseEnabled) {
+    notificationSettings = await loadNotificationSettings();
+    telegramState = await loadTelegramState();
+  }
+
+  setInterval(() => {
+    void runAutomaticNotificationCheck();
+  }, 60 * 1000);
+
+  setInterval(() => {
+    void processTelegramCommands();
+  }, 15 * 1000);
+
+  app.listen(port, () => {
+    console.log(`TelegramChick started on http://localhost:${port}`);
+  });
+}
+
+void bootstrap();

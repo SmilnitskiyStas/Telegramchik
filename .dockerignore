@@ -1,0 +1,14 @@
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+dist
+apps/*/dist
+packages/*/dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+coverage
+*.log
+logs

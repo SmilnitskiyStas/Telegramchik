@@ -2,7 +2,11 @@
 import { Product, ProductStatus } from "./types";
 import { StoreLayoutPage } from "./StoreLayoutPage";
 
-const API_URL = `http://${window.location.hostname || "localhost"}:3001`;
+const API_URL =
+  import.meta.env.VITE_API_URL?.trim() ||
+  (import.meta.env.DEV
+    ? `http://${window.location.hostname || "localhost"}:3001`
+    : "");
 
 const statuses: ProductStatus[] = [
   "нове",
@@ -812,6 +816,19 @@ export function App() {
           <button type="button" onClick={() => void handleSaveNotificationSettings()} disabled={savingSettings}>
             {savingSettings ? "Збереження..." : "Зберегти автосповіщення"}
           </button>
+        </div>
+      </section>
+
+      <section className="panel settingsPanel settingsPanelWide">
+        <h2>Supabase та розширення API</h2>
+        <div className="menuHintBox">
+          <strong>SQL-файли вже підготовлені</strong>
+          <p>Для запуску бази в Supabase використовуй `001_schema.sql`, `002_rls_policies.sql`, `003_seed.sql` і `004_api_support.sql` з папки `database/supabase`.</p>
+        </div>
+        <div className="details">
+          <p><strong>Що вже покрито:</strong> магазини, користувачі, товари, партії, журнали дій, журнали повідомлень, notification settings, telegram state.</p>
+          <p><strong>Що готово для API:</strong> views `api_stores_v`, `api_employees_v`, `api_products_v` і helper functions для пошуку користувача по `chat_id`, налаштувань Telegram та upsert партій.</p>
+          <p><strong>Що ще треба доробити:</strong> нормалізувати поточні UI-статуси товару під `check_status` у БД і перевести `apps/api` з in-memory масивів на запити в Supabase.</p>
         </div>
       </section>
     </div>

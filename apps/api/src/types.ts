@@ -30,4 +30,6 @@ export type ProductBatch = {
 export type Product = ProductCatalogItem &
   Omit<ProductBatch, "productId"> & {
     productId: string;
+    storeName?: string;
+    receiverFullName?: string;
   };
