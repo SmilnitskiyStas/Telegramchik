@@ -28,6 +28,7 @@ import {
 import { hasDatabase } from "./db.js";
 import {
   createStore as createStoreInDatabase,
+  completeTelegramRegistration as completeTelegramRegistrationInDatabase,
   createProduct as createProductInDatabase,
   closeCurrentDeliveryBatch as closeCurrentDeliveryBatchInDatabase,
   getCurrentOpenDeliveryBatch as getCurrentOpenDeliveryBatchFromDatabase,
@@ -43,7 +44,6 @@ import {
   getTelegramState as getTelegramStateFromDatabase,
   hasNotificationTypeBeenSentOnDate,
   insertNotificationLog,
-  registerTelegramUser,
   saveNotificationSettings as saveNotificationSettingsToDatabase,
   saveTelegramState as saveTelegramStateToDatabase,
   updateEmployee as updateEmployeeInDatabase,
@@ -329,6 +329,10 @@ function buildReceiveLink(chatId: string) {
   return `${appUrl}/?mode=receive&clientId=${encodeURIComponent(chatId)}`;
 }
 
+function buildRegistrationLink(chatId: string) {
+  return `${appUrl}/register?clientId=${encodeURIComponent(chatId)}`;
+}
+
 async function findEmployeeForChatId(chatId: string) {
   if (databaseEnabled) {
     return getEmployeeByChatIdFromDatabase(chatId);
@@ -347,23 +351,7 @@ async function registerTelegramEmployeeIfNeeded(input: {
   if (existing) {
     return existing;
   }
-
-  if (databaseEnabled) {
-    return registerTelegramUser(input);
-  }
-
-  touchEmployeeActivity(
-    input.chatId,
-    "Автоматична реєстрація користувача через Telegram /start",
-    {
-      fullName:
-        [input.firstName, input.lastName].filter(Boolean).join(" ").trim() || undefined,
-      role: "Співробітник",
-      storeName: "Telegram Registration",
-    },
-  );
-
-  return findEmployeeByChatId(input.chatId);
+  return null;
 }
 
 function buildTelegramWelcomeMessage(fullName?: string) {
@@ -374,6 +362,13 @@ function buildTelegramWelcomeMessage(fullName?: string) {
     "Команди:",
     "/start - реєстрація або повторне підключення",
     "/newproduct - відкрити форму додавання нової партії",
+  ].join("\n");
+}
+
+function buildTelegramRegistrationMessage() {
+  return [
+    "Користувача ще не зареєстровано.",
+    "Відкрийте форму реєстрації, виберіть магазин і заповніть свої дані.",
   ].join("\n");
 }
 
@@ -402,6 +397,29 @@ async function handleTelegramUpdate(update: TelegramUpdate) {
       lastName: from?.last_name,
       username: from?.username,
     });
+
+    if (!employee) {
+      const registrationLink = buildRegistrationLink(String(chatId));
+      await sendTelegramMessage(
+        String(chatId),
+        canUseTelegramUrl(registrationLink)
+          ? buildTelegramRegistrationMessage()
+          : `${buildTelegramRegistrationMessage()}\n${registrationLink}`,
+        canUseTelegramUrl(registrationLink)
+          ? {
+              inline_keyboard: [
+                [
+                  {
+                    text: "Зареєструватися",
+                    url: registrationLink,
+                  }
+                ]
+              ]
+            }
+          : undefined,
+      );
+      return;
+    }
 
     await sendTelegramMessage(
       String(chatId),
@@ -754,6 +772,87 @@ app.get("/employees/by-chat/:chatId", async (request, response) => {
   }
 
   response.json(employee);
+});
+
+app.post("/telegram/register", async (request, response) => {
+  const body = request.body as Partial<{
+    chatId: string;
+    name: string;
+    surname: string;
+    storeId: string;
+    role: "user" | "manager";
+  }>;
+
+  const chatId = String(body.chatId ?? "").trim();
+  const name = String(body.name ?? "").trim();
+  const surname = String(body.surname ?? "").trim();
+  const storeId = String(body.storeId ?? "").trim();
+  const role = body.role === "manager" ? "manager" : "user";
+
+  if (!chatId || !name || !surname || !storeId) {
+    response.status(400).json({ message: "Registration fields are required" });
+    return;
+  }
+
+  if (databaseEnabled) {
+    try {
+      const employee = await completeTelegramRegistrationInDatabase({
+        chatId,
+        name,
+        surname,
+        storeId,
+        role,
+      });
+
+      if (!employee) {
+        response.status(400).json({ message: "Failed to complete registration" });
+        return;
+      }
+
+      response.status(201).json(employee);
+      return;
+    } catch (error) {
+      response.status(400).json({
+        message: error instanceof Error ? error.message : "Failed to complete registration",
+      });
+      return;
+    }
+  }
+
+  const existing = findEmployeeByChatId(chatId);
+  const store = findStoreById(storeId);
+  if (existing) {
+    existing.name = name;
+    existing.surname = surname;
+    existing.fullName = `${name} ${surname}`.trim();
+    existing.role = role;
+    existing.storeId = storeId;
+    existing.storeName = store?.name ?? existing.storeName;
+    existing.status = "на зміні";
+    response.status(201).json(existing);
+    return;
+  }
+
+  touchEmployeeActivity(chatId, "Завершив самостійну реєстрацію через web-форму", {
+    fullName: `${name} ${surname}`.trim(),
+    role,
+    storeName: store?.name,
+  });
+
+  const created = findEmployeeByChatId(chatId);
+  if (!created) {
+    response.status(400).json({ message: "Failed to complete registration" });
+    return;
+  }
+
+  created.name = name;
+  created.surname = surname;
+  created.fullName = `${name} ${surname}`.trim();
+  created.role = role;
+  created.storeId = storeId;
+  created.storeName = store?.name ?? created.storeName;
+
+  response.status(201).json(created);
 });
 
 app.put("/employees/:id", async (request, response) => {

@@ -72,7 +72,8 @@ type ViewMode =
   | "employees"
   | "store-layout"
   | "delivery-batches"
-  | "stores";
+  | "stores"
+  | "register";
 type BarcodeDetectorResult = {
   rawValue?: string;
 };
@@ -128,6 +129,7 @@ function getViewMode(): ViewMode {
   const params = new URLSearchParams(window.location.search);
   const forcedMode = params.get("mode");
 
+  if (window.location.pathname === "/register" || forcedMode === "register") return "register";
   if (
     window.location.pathname === "/receive" ||
     forcedMode === "receive" ||
@@ -168,6 +170,13 @@ export function App() {
     name: "",
     isActive: true,
   });
+  const [registrationForm, setRegistrationForm] = useState({
+    chatId: new URLSearchParams(window.location.search).get("clientId") ?? "",
+    name: "",
+    surname: "",
+    storeId: "",
+    role: "user",
+  });
   const [storeEditForm, setStoreEditForm] = useState({
     code: "",
     name: "",
@@ -184,6 +193,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submittingStore, setSubmittingStore] = useState(false);
+  const [submittingRegistration, setSubmittingRegistration] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -492,6 +502,31 @@ export function App() {
   }, [employees]);
 
   useEffect(() => {
+    const clientId = new URLSearchParams(window.location.search).get("clientId") ?? "";
+    if (!clientId) {
+      return;
+    }
+
+    setRegistrationForm((current) => ({
+      ...current,
+      chatId: clientId,
+    }));
+
+    const matchedEmployee = employees.find((employee) => employee.telegramClientId === clientId);
+    if (!matchedEmployee) {
+      return;
+    }
+
+    setRegistrationForm({
+      chatId: clientId,
+      name: matchedEmployee.name,
+      surname: matchedEmployee.surname,
+      storeId: matchedEmployee.storeId,
+      role: matchedEmployee.role === "manager" ? "manager" : "user",
+    });
+  }, [employees]);
+
+  useEffect(() => {
     if (!form.storeId) {
       return;
     }
@@ -792,6 +827,34 @@ export function App() {
     });
     await loadStores();
     window.alert(`Магазин ${data.name} додано.`);
+  }
+
+  async function handleCompleteRegistration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmittingRegistration(true);
+
+    const response = await fetch(`${API_URL}/telegram/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(registrationForm),
+    });
+
+    const data = (await response.json()) as Employee & { message?: string };
+    setSubmittingRegistration(false);
+
+    if (!response.ok) {
+      window.alert(data.message ?? "Не вдалося завершити реєстрацію.");
+      return;
+    }
+
+    await loadEmployees();
+    setForm((current) => ({
+      ...current,
+      receivedByUserId: data.id,
+      storeId: data.storeId,
+    }));
+    window.alert(`Реєстрацію завершено для ${data.fullName}.`);
+    navigate(`/?mode=receive&clientId=${encodeURIComponent(registrationForm.chatId)}`);
   }
 
   async function handleUpdateStore(event: FormEvent<HTMLFormElement>) {
@@ -1464,6 +1527,74 @@ export function App() {
     </section>
   );
 
+  const registrationContent = (
+    <section className="panel receivePanel">
+      <div className="receiveHeader">
+        <h2>Реєстрація користувача</h2>
+      </div>
+      <form className="form receiveForm" onSubmit={handleCompleteRegistration}>
+        <div className="formGrid">
+          <label className="fieldBlock">
+            <span className="fieldLabel">Telegram chat ID</span>
+            <input value={registrationForm.chatId} readOnly />
+          </label>
+          <label className="fieldBlock">
+            <span className="fieldLabel">Ім'я</span>
+            <input
+              value={registrationForm.name}
+              onChange={(event) => setRegistrationForm((current) => ({ ...current, name: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="fieldBlock">
+            <span className="fieldLabel">Прізвище</span>
+            <input
+              value={registrationForm.surname}
+              onChange={(event) => setRegistrationForm((current) => ({ ...current, surname: event.target.value }))}
+              required
+            />
+          </label>
+          <label className="fieldBlock">
+            <span className="fieldLabel">Магазин</span>
+            <select
+              value={registrationForm.storeId}
+              onChange={(event) => setRegistrationForm((current) => ({ ...current, storeId: event.target.value }))}
+              required
+            >
+              <option value="">Оберіть магазин</option>
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name} · {store.code}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="fieldBlock">
+            <span className="fieldLabel">Роль</span>
+            <select
+              value={registrationForm.role}
+              onChange={(event) => setRegistrationForm((current) => ({ ...current, role: event.target.value }))}
+            >
+              <option value="user">Співробітник</option>
+              <option value="manager">Менеджер</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="menuHintBox">
+          <strong>Після реєстрації</strong>
+          <p>Після успішної реєстрації система автоматично відкриє форму приймання товару для вашого магазину.</p>
+        </div>
+
+        <div className="receiveActions">
+          <button type="submit" disabled={submittingRegistration}>
+            {submittingRegistration ? "Збереження..." : "Завершити реєстрацію"}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+
   function renderPageShell(input: {
     eyebrow: string;
     title: string;
@@ -1507,6 +1638,16 @@ export function App() {
           </div>
         </div>
       ),
+    });
+  }
+
+  if (viewMode === "register") {
+    return renderPageShell({
+      eyebrow: "Реєстрація",
+      title: "Завершення реєстрації користувача",
+      text: "Оберіть магазин і заповніть свої дані, щоб надалі працювати з товарами через Telegram та web-інтерфейс.",
+      compact: true,
+      content: registrationContent,
     });
   }
 

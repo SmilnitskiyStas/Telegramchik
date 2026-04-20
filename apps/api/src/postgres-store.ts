@@ -372,6 +372,45 @@ export async function registerTelegramUser(input: {
   return created;
 }
 
+export async function completeTelegramRegistration(input: {
+  chatId: string;
+  name: string;
+  surname: string;
+  storeId: string;
+  role: "user" | "manager";
+}) {
+  await query(
+    `insert into users (store_id, name, surname, user_chat_id, role, is_active)
+     values ($1::bigint, $2, $3, $4::bigint, $5::user_role, true)
+     on conflict (user_chat_id) do update
+     set store_id = excluded.store_id,
+         name = excluded.name,
+         surname = excluded.surname,
+         role = excluded.role,
+         is_active = true`,
+    [
+      Number(input.storeId),
+      input.name.trim(),
+      input.surname.trim(),
+      Number(input.chatId),
+      input.role,
+    ],
+  );
+
+  const employee = await getEmployeeByChatId(input.chatId);
+
+  if (employee) {
+    await insertActivityLog({
+      userId: employee.id,
+      actionType: "telegram_registration_completed",
+      storeId: employee.storeId,
+      comment: "\u041a\u043e\u0440\u0438\u0441\u0442\u0443\u0432\u0430\u0447 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0432 \u0441\u0430\u043c\u043e\u0441\u0442\u0456\u0439\u043d\u0443 \u0440\u0435\u0454\u0441\u0442\u0440\u0430\u0446\u0456\u044e \u0447\u0435\u0440\u0435\u0437 web-\u0444\u043e\u0440\u043c\u0443",
+    });
+  }
+
+  return employee;
+}
+
 async function ensureOpenDeliveryBatch(storeId: string, userId: string, receivedAt: string) {
   const existing = await query<{ id: number }>(
     `select id
