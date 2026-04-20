@@ -10,6 +10,10 @@ type StoreRow = {
   is_active: boolean;
 };
 
+type RegistrationStoreRow = {
+  id: number;
+};
+
 type EmployeeActivity = {
   at: string;
   action: string;
@@ -190,6 +194,58 @@ export async function getEmployeeById(id: string) {
     [Number(id)],
   );
   return result.rows[0] ? mapEmployee(result.rows[0]) : null;
+}
+
+async function ensureTelegramRegistrationStore() {
+  const result = await query<RegistrationStoreRow>(
+    `insert into stores (store_code, store_name, is_active)
+     values ('TG-REG', 'Telegram Registration', true)
+     on conflict (store_code) do update
+     set store_name = excluded.store_name,
+         is_active = excluded.is_active
+     returning id`,
+  );
+
+  return result.rows[0].id;
+}
+
+export async function registerTelegramUser(input: {
+  chatId: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+}) {
+  const existing = await getEmployeeByChatId(input.chatId);
+  if (existing) {
+    return existing;
+  }
+
+  const storeId = await ensureTelegramRegistrationStore();
+  const rawFirstName = input.firstName?.trim() || "Telegram";
+  const rawLastName =
+    input.lastName?.trim() ||
+    input.username?.trim() ||
+    `User ${input.chatId.trim()}`;
+
+  await query(
+    `insert into users (store_id, name, surname, user_chat_id, role, is_active)
+     values ($1::bigint, $2, $3, $4::bigint, 'user'::user_role, true)
+     on conflict (user_chat_id) do nothing`,
+    [storeId, rawFirstName, rawLastName, Number(input.chatId)],
+  );
+
+  const created = await getEmployeeByChatId(input.chatId);
+
+  if (created) {
+    await insertActivityLog({
+      userId: created.id,
+      actionType: "telegram_user_registered",
+      storeId: created.storeId,
+      comment: "Автоматична реєстрація користувача через Telegram /start",
+    });
+  }
+
+  return created;
 }
 
 export async function getProducts() {

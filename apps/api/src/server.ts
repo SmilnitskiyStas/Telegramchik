@@ -37,6 +37,7 @@ import {
   getStores as getStoresFromDatabase,
   getTelegramState as getTelegramStateFromDatabase,
   insertNotificationLog,
+  registerTelegramUser,
   saveNotificationSettings as saveNotificationSettingsToDatabase,
   saveTelegramState as saveTelegramStateToDatabase,
   updateProductStatus as updateProductStatusInDatabase,
@@ -47,6 +48,11 @@ type TelegramUpdate = {
   update_id: number;
   message?: {
     text?: string;
+    from?: {
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+    };
     chat?: {
       id?: number;
     };
@@ -289,6 +295,54 @@ function buildReceiveLink(chatId: string) {
   return `${appUrl}/receive?clientId=${encodeURIComponent(chatId)}`;
 }
 
+async function findEmployeeForChatId(chatId: string) {
+  if (databaseEnabled) {
+    return getEmployeeByChatIdFromDatabase(chatId);
+  }
+
+  return findEmployeeByChatId(chatId);
+}
+
+async function registerTelegramEmployeeIfNeeded(input: {
+  chatId: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+}) {
+  const existing = await findEmployeeForChatId(input.chatId);
+  if (existing) {
+    return existing;
+  }
+
+  if (databaseEnabled) {
+    return registerTelegramUser(input);
+  }
+
+  touchEmployeeActivity(
+    input.chatId,
+    "Автоматична реєстрація користувача через Telegram /start",
+    {
+      fullName:
+        [input.firstName, input.lastName].filter(Boolean).join(" ").trim() || undefined,
+      role: "Співробітник",
+      storeName: "Telegram Registration",
+    },
+  );
+
+  return findEmployeeByChatId(input.chatId);
+}
+
+function buildTelegramWelcomeMessage(fullName?: string) {
+  return [
+    `Вітаю${fullName ? `, ${fullName}` : ""}.`,
+    "TelegramChick підключено.",
+    "",
+    "Команди:",
+    "/start - реєстрація або повторне підключення",
+    "/newproduct - відкрити форму додавання нової партії",
+  ].join("\n");
+}
+
 async function runAutomaticNotificationCheck() {
   const currentSettings = await loadNotificationSettings();
 
@@ -364,6 +418,7 @@ async function processTelegramCommands() {
     for (const update of updates) {
       const text = update.message?.text?.trim().toLowerCase();
       const chatId = update.message?.chat?.id;
+      const from = update.message?.from;
 
       if (typeof update.update_id === "number") {
         await persistTelegramState(update.update_id);
@@ -373,7 +428,34 @@ async function processTelegramCommands() {
         continue;
       }
 
+      if (text === "/start") {
+        const employee = await registerTelegramEmployeeIfNeeded({
+          chatId: String(chatId),
+          firstName: from?.first_name,
+          lastName: from?.last_name,
+          username: from?.username,
+        });
+
+        await sendTelegramMessage(
+          String(chatId),
+          buildTelegramWelcomeMessage(employee?.fullName),
+          getSystemReplyMarkup(),
+        );
+        continue;
+      }
+
       if (text === "/newproduct" || text === "/addproduct") {
+        const employee = await findEmployeeForChatId(String(chatId));
+
+        if (!employee) {
+          await sendTelegramMessage(
+            String(chatId),
+            "Користувача не знайдено. Спочатку надішліть /start для автоматичної реєстрації.",
+            getSystemReplyMarkup(),
+          );
+          continue;
+        }
+
         await sendTelegramMessage(
           String(chatId),
           canUseTelegramUrl(buildReceiveLink(String(chatId)))
