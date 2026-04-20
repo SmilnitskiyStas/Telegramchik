@@ -27,6 +27,7 @@ import {
 } from "./data.js";
 import { hasDatabase } from "./db.js";
 import {
+  createStore as createStoreInDatabase,
   createProduct as createProductInDatabase,
   closeCurrentDeliveryBatch as closeCurrentDeliveryBatchInDatabase,
   getCurrentOpenDeliveryBatch as getCurrentOpenDeliveryBatchFromDatabase,
@@ -590,6 +591,45 @@ app.get("/employees", async (_request, response) => {
 app.get("/stores", async (_request, response) => {
   const nextStores = databaseEnabled ? await getStoresFromDatabase() : stores;
   response.json(nextStores);
+});
+
+app.post("/stores", async (request, response) => {
+  const body = request.body as Partial<{
+    code: string;
+    name: string;
+    isActive: boolean;
+  }>;
+
+  const code = String(body.code ?? "").trim();
+  const name = String(body.name ?? "").trim();
+  const isActive = body.isActive ?? true;
+
+  if (!code || !name) {
+    response.status(400).json({ message: "Store code and name are required" });
+    return;
+  }
+
+  if (databaseEnabled) {
+    try {
+      const created = await createStoreInDatabase({ code, name, isActive });
+      response.status(201).json(created);
+      return;
+    } catch (error) {
+      response.status(400).json({
+        message: error instanceof Error ? error.message : "Failed to create store",
+      });
+      return;
+    }
+  }
+
+  const created = {
+    id: `store-${Date.now()}`,
+    code,
+    name,
+    isActive,
+  };
+  stores.push(created);
+  response.status(201).json(created);
 });
 
 app.get("/delivery-batches", async (request, response) => {

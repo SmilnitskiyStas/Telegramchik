@@ -202,6 +202,29 @@ export async function getStores() {
   return result.rows.map(mapStore);
 }
 
+export async function createStore(input: {
+  code: string;
+  name: string;
+  isActive?: boolean;
+}) {
+  const result = await query<StoreRow>(
+    `insert into stores (store_code, store_name, is_active)
+     values ($1, $2, $3)
+     returning
+       id,
+       store_code as code,
+       coalesce(store_name, store_code) as name,
+       is_active`,
+    [
+      input.code.trim(),
+      input.name.trim(),
+      input.isActive ?? true,
+    ],
+  );
+
+  return mapStore(result.rows[0]);
+}
+
 export async function getEmployees() {
   const result = await query<EmployeeRow>(
     `select id, name, surname, full_name, role, store_id, store_name, telegram_client_id, status, last_activity_at, last_action, activity_log

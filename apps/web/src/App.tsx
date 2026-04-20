@@ -65,7 +65,14 @@ type ProductGroup = {
 };
 
 type ExpiryState = "fresh" | "expiring" | "expired";
-type ViewMode = "dashboard" | "receive" | "settings" | "employees" | "store-layout" | "delivery-batches";
+type ViewMode =
+  | "dashboard"
+  | "receive"
+  | "settings"
+  | "employees"
+  | "store-layout"
+  | "delivery-batches"
+  | "stores";
 type BarcodeDetectorResult = {
   rawValue?: string;
 };
@@ -132,6 +139,7 @@ function getViewMode(): ViewMode {
   if (window.location.pathname === "/employees") return "employees";
   if (window.location.pathname === "/store-layout") return "store-layout";
   if (window.location.pathname === "/delivery-batches") return "delivery-batches";
+  if (window.location.pathname === "/stores") return "stores";
   return "dashboard";
 }
 
@@ -154,8 +162,14 @@ export function App() {
   const [form, setForm] = useState(() => {
     return createEmptyForm();
   });
+  const [storeForm, setStoreForm] = useState({
+    code: "",
+    name: "",
+    isActive: true,
+  });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [submittingStore, setSubmittingStore] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerBusy, setScannerBusy] = useState(false);
@@ -328,6 +342,13 @@ export function App() {
             }}
           >
             Партії
+          </button>
+          <button
+            type="button"
+            className={`menuButton ${viewMode === "stores" ? "menuButtonActive" : ""}`}
+            onClick={() => navigate("/stores")}
+          >
+            Магазини
           </button>
           <button
             type="button"
@@ -695,6 +716,33 @@ export function App() {
     await loadDeliveryBatches(form.storeId);
     setSelectedDeliveryBatchId(data.batch?.id ?? null);
     window.alert("Поточну партію поставки закрито. Наступне надходження піде в нову партію.");
+  }
+
+  async function handleCreateStore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmittingStore(true);
+
+    const response = await fetch(`${API_URL}/stores`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(storeForm),
+    });
+
+    const data = (await response.json()) as Store & { message?: string };
+    setSubmittingStore(false);
+
+    if (!response.ok) {
+      window.alert(data.message ?? "Не вдалося створити магазин.");
+      return;
+    }
+
+    setStoreForm({
+      code: "",
+      name: "",
+      isActive: true,
+    });
+    await loadStores();
+    window.alert(`Магазин ${data.name} додано.`);
   }
 
   async function handleTelegramPreview(productId?: string) {
@@ -1175,6 +1223,84 @@ export function App() {
     </section>
   );
 
+  const storesContent = (
+    <section className="panel employeesShell">
+      <div className="employeesPageGrid">
+        <section className="employeesPanel">
+          <div className="toolbar">
+            <div className="toolbarTitle">
+              <h2>Магазини</h2>
+            </div>
+          </div>
+          <div className="productTableWrap">
+            <div className="productTable deliveryBatchTable">
+              <div className="tableHead deliveryBatchHead">
+                <span>Код</span>
+                <span>Назва</span>
+                <span>Статус</span>
+                <span>ID</span>
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              {stores.map((store) => (
+                <article key={store.id} className="tableRow deliveryBatchRow">
+                  <strong>{store.code}</strong>
+                  <span>{store.name}</span>
+                  <span>
+                    <span className={`statusBadge ${store.isActive ? "employee-status-на зміні" : "employee-status-відсутній"}`}>
+                      {store.isActive ? "активний" : "неактивний"}
+                    </span>
+                  </span>
+                  <span>{store.id}</span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </article>
+              ))}
+              {!stores.length && <p className="emptyState">Поки що немає магазинів.</p>}
+            </div>
+          </div>
+        </section>
+
+        <aside className="employeeDetailsPanel">
+          <h2>Додати магазин</h2>
+          <form className="details" onSubmit={handleCreateStore}>
+            <label className="fieldBlock">
+              <span className="fieldLabel">Код магазину</span>
+              <input
+                placeholder="Наприклад: M4"
+                value={storeForm.code}
+                onChange={(event) => setStoreForm((current) => ({ ...current, code: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="fieldBlock">
+              <span className="fieldLabel">Назва магазину</span>
+              <input
+                placeholder="Наприклад: Магазин Центр"
+                value={storeForm.name}
+                onChange={(event) => setStoreForm((current) => ({ ...current, name: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={storeForm.isActive}
+                onChange={(event) => setStoreForm((current) => ({ ...current, isActive: event.target.checked }))}
+              />
+              <span>Магазин активний</span>
+            </label>
+            <button type="submit" disabled={submittingStore}>
+              {submittingStore ? "Збереження..." : "Додати магазин"}
+            </button>
+          </form>
+        </aside>
+      </div>
+    </section>
+  );
+
   if (viewMode === "receive") {
     return (
       <div className="page receivePage">
@@ -1290,6 +1416,24 @@ export function App() {
 
   if (viewMode === "store-layout") {
     return <StoreLayoutPage onBack={() => navigate("/")} products={products} />;
+  }
+
+  if (viewMode === "stores") {
+    return (
+      <div className="page receivePage">
+        <section className="hero">
+          <div>
+            <p className="eyebrow">Магазини</p>
+            <h1>Список магазинів</h1>
+            <p className="heroText">Тут видно магазини, які є в базі, і можна додати новий магазин для подальшої роботи в системі.</p>
+          </div>
+        </section>
+        <section className="appShell">
+          {renderSidebar()}
+          <div className="pageSectionContent">{storesContent}</div>
+        </section>
+      </div>
+    );
   }
 
   return (
