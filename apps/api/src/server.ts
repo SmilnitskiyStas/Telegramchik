@@ -780,13 +780,18 @@ app.patch("/products/:id/status", async (request, response) => {
 app.get("/telegram/status", async (_request, response) => {
   try {
     const currentSettings = await loadNotificationSettings();
-    const result = await telegramRequest("getMe");
+    const [bot, webhook] = await Promise.all([
+      telegramRequest("getMe"),
+      telegramRequest("getWebhookInfo"),
+    ]);
     response.json({
       ok: true,
       configured: true,
-      bot: result,
+      bot,
+      webhook,
       defaultChatId: currentSettings.chatId || defaultTelegramChatId,
-      receivePathExample: `${appUrl}/receive?clientId=123456`
+      receivePathExample: `${appUrl}/receive?clientId=123456`,
+      webhookUrl: getTelegramWebhookUrl(),
     });
   } catch (error) {
     response.status(400).json({
@@ -831,6 +836,22 @@ app.post("/telegram/webhook", async (request, response) => {
 });
 
 app.post("/telegram/set-webhook", async (_request, response) => {
+  try {
+    await ensureTelegramWebhook();
+    response.json({
+      ok: true,
+      webhookUrl: getTelegramWebhookUrl(),
+      webhookEnabled: telegramWebhookEnabled,
+    });
+  } catch (error) {
+    response.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : "Unknown Telegram error"
+    });
+  }
+});
+
+app.get("/telegram/set-webhook", async (_request, response) => {
   try {
     await ensureTelegramWebhook();
     response.json({
