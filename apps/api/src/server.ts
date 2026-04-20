@@ -102,6 +102,7 @@ const databaseConfigured = hasDatabase();
 let databaseEnabled = databaseConfigured;
 let autoNotificationInFlight = false;
 let autoNotificationSentKey: string | null = null;
+const processedTelegramUpdates = new Map<number, number>();
 
 app.use(cors());
 app.use(express.json());
@@ -267,6 +268,21 @@ function getCurrentTimeKey() {
   const hours = String(now.getHours()).padStart(2, "0");
   const minutes = String(now.getMinutes()).padStart(2, "0");
   return `${hours}:${minutes}`;
+}
+
+function rememberProcessedTelegramUpdate(updateId: number) {
+  const now = Date.now();
+  processedTelegramUpdates.set(updateId, now);
+
+  for (const [storedUpdateId, storedAt] of processedTelegramUpdates.entries()) {
+    if (now - storedAt > 10 * 60 * 1000) {
+      processedTelegramUpdates.delete(storedUpdateId);
+    }
+  }
+}
+
+function hasProcessedTelegramUpdate(updateId: number) {
+  return processedTelegramUpdates.has(updateId);
 }
 
 async function getProductsForNotification(daysBefore: number) {
@@ -463,8 +479,13 @@ async function processTelegramCommands() {
       const chatId = update.message?.chat?.id;
       const from = update.message?.from;
 
+      if (typeof update.update_id === "number" && hasProcessedTelegramUpdate(update.update_id)) {
+        continue;
+      }
+
       if (typeof update.update_id === "number") {
         await persistTelegramState(update.update_id);
+        rememberProcessedTelegramUpdate(update.update_id);
       }
 
       if (!text || typeof chatId !== "number") {
