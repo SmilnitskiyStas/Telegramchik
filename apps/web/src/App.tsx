@@ -103,7 +103,16 @@ function createEmptyForm() {
 }
 
 function getViewMode(): ViewMode {
-  if (window.location.pathname === "/receive") return "receive";
+  const params = new URLSearchParams(window.location.search);
+  const forcedMode = params.get("mode");
+
+  if (
+    window.location.pathname === "/receive" ||
+    forcedMode === "receive" ||
+    params.has("clientId")
+  ) {
+    return "receive";
+  }
   if (window.location.pathname === "/settings") return "settings";
   if (window.location.pathname === "/employees") return "employees";
   if (window.location.pathname === "/store-layout") return "store-layout";

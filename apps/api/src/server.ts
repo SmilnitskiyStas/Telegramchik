@@ -292,7 +292,7 @@ function buildDigestMessage(items: Product[], daysBefore: number) {
 }
 
 function buildReceiveLink(chatId: string) {
-  return `${appUrl}/receive?clientId=${encodeURIComponent(chatId)}`;
+  return `${appUrl}/?mode=receive&clientId=${encodeURIComponent(chatId)}`;
 }
 
 async function findEmployeeForChatId(chatId: string) {
