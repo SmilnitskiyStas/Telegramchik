@@ -442,6 +442,41 @@ label {
   padding: 18px 16px;
 }
 
+.deliveryBatchTable {
+  min-width: 1080px;
+}
+
+.deliveryBatchHead,
+.deliveryBatchRow {
+  grid-template-columns: minmax(170px, 1.5fr) minmax(150px, 1.4fr) 120px 120px 90px minmax(180px, 1.4fr) 120px;
+}
+
+.deliveryBatchRow {
+  align-items: center;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 29, 39, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 40;
+}
+
+.modalCard {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 28px 80px rgba(17, 28, 43, 0.3);
+  display: grid;
+  gap: 18px;
+}
+
 .status {
   color: #bf5a36;
   font-weight: 600;

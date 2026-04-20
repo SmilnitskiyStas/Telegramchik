@@ -65,7 +65,7 @@ type ProductGroup = {
 };
 
 type ExpiryState = "fresh" | "expiring" | "expired";
-type ViewMode = "dashboard" | "receive" | "settings" | "employees" | "store-layout";
+type ViewMode = "dashboard" | "receive" | "settings" | "employees" | "store-layout" | "delivery-batches";
 type BarcodeDetectorResult = {
   rawValue?: string;
 };
@@ -131,6 +131,7 @@ function getViewMode(): ViewMode {
   if (window.location.pathname === "/settings") return "settings";
   if (window.location.pathname === "/employees") return "employees";
   if (window.location.pathname === "/store-layout") return "store-layout";
+  if (window.location.pathname === "/delivery-batches") return "delivery-batches";
   return "dashboard";
 }
 
@@ -317,6 +318,13 @@ export function App() {
             onClick={() => navigate("/employees")}
           >
             Користувачі
+          </button>
+          <button
+            type="button"
+            className={`menuButton ${viewMode === "delivery-batches" ? "menuButtonActive" : ""}`}
+            onClick={() => navigate("/delivery-batches")}
+          >
+            Партії
           </button>
           <button
             type="button"
@@ -566,6 +574,14 @@ export function App() {
     );
   }, [deliveryBatches, form.storeId]);
 
+  const sortedDeliveryBatches = useMemo(() => {
+    return [...deliveryBatches].sort((left, right) => {
+      const leftKey = `${left.deliveryDate}-${String(left.batchNumber).padStart(4, "0")}`;
+      const rightKey = `${right.deliveryDate}-${String(right.batchNumber).padStart(4, "0")}`;
+      return rightKey.localeCompare(leftKey);
+    });
+  }, [deliveryBatches]);
+
   const selectedEmployee = useMemo(
     () =>
       employees.find((employee) => employee.id === selectedEmployeeId) ??
@@ -595,6 +611,12 @@ export function App() {
 
     return { total: groupedProducts.length, expiring, expired, inProgress };
   }, [groupedProducts]);
+
+  const batchesSummary = useMemo(() => {
+    const active = deliveryBatches.filter((batch) => batch.status === "open").length;
+    const closed = deliveryBatches.filter((batch) => batch.status === "closed").length;
+    return { total: deliveryBatches.length, active, closed };
+  }, [deliveryBatches]);
 
   async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1096,6 +1118,60 @@ export function App() {
     </section>
   );
 
+  const deliveryBatchesContent = (
+    <section className="panel employeesShell">
+      <div className="toolbar">
+        <div className="toolbarTitle">
+          <h2>Партії поставок</h2>
+        </div>
+        <div className="filters">
+          <span className="statusBadge status-нове">Усього: {batchesSummary.total}</span>
+          <span className="statusBadge employee-status-на зміні">Активні: {batchesSummary.active}</span>
+          <span className="statusBadge employee-status-відсутній">Закриті: {batchesSummary.closed}</span>
+        </div>
+      </div>
+      <div className="productTableWrap">
+        <div className="productTable deliveryBatchTable">
+          <div className="tableHead deliveryBatchHead">
+            <span>Партія</span>
+            <span>Магазин</span>
+            <span>Дата</span>
+            <span>Статус</span>
+            <span>Позицій</span>
+            <span>Створив</span>
+            <span>Дія</span>
+          </div>
+          {sortedDeliveryBatches.map((batch) => (
+            <article key={batch.id} className="tableRow deliveryBatchRow">
+              <strong>{batch.label}</strong>
+              <span>{batch.storeName}</span>
+              <span>{batch.deliveryDate}</span>
+              <span>
+                <span className={`statusBadge ${batch.status === "open" ? "employee-status-на зміні" : "employee-status-відсутній"}`}>
+                  {batch.status === "open" ? "активна" : "закрита"}
+                </span>
+              </span>
+              <span>{batch.items.length}</span>
+              <span>{batch.createdByFullName || "—"}</span>
+              <span>
+                <button
+                  type="button"
+                  className="ghostButton"
+                  onClick={() => setSelectedDeliveryBatchId(batch.id)}
+                >
+                  Переглянути
+                </button>
+              </span>
+            </article>
+          ))}
+          {!sortedDeliveryBatches.length && (
+            <p className="emptyState">Поки що немає жодної створеної партії поставки.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+
   if (viewMode === "receive") {
     return (
       <div className="page receivePage">
@@ -1154,6 +1230,57 @@ export function App() {
           {renderSidebar()}
           <div className="pageSectionContent">{employeesContent}</div>
         </section>
+      </div>
+    );
+  }
+
+  if (viewMode === "delivery-batches") {
+    return (
+      <div className="page receivePage">
+        <section className="hero">
+          <div>
+            <p className="eyebrow">Партії</p>
+            <h1>Журнал поставок</h1>
+            <p className="heroText">Тут видно всі створені партії поставок, активні та закриті, і склад кожної партії окремо.</p>
+          </div>
+        </section>
+        <section className="appShell">
+          {renderSidebar()}
+          <div className="pageSectionContent">{deliveryBatchesContent}</div>
+        </section>
+        {selectedDeliveryBatch && (
+          <div className="modalOverlay" onClick={() => setSelectedDeliveryBatchId(null)}>
+            <div className="modalCard" onClick={(event) => event.stopPropagation()}>
+              <div className="receiveHeader">
+                <h2>Партія {selectedDeliveryBatch.label}</h2>
+                <button type="button" className="ghostButton" onClick={() => setSelectedDeliveryBatchId(null)}>
+                  Закрити
+                </button>
+              </div>
+              <div className="details">
+                <p><strong>Магазин:</strong> {selectedDeliveryBatch.storeName}</p>
+                <p><strong>Дата:</strong> {selectedDeliveryBatch.deliveryDate}</p>
+                <p><strong>Статус:</strong> {selectedDeliveryBatch.status === "open" ? "активна" : "закрита"}</p>
+                <p><strong>Створив:</strong> {selectedDeliveryBatch.createdByFullName || "—"}</p>
+              </div>
+              <div className="batchList">
+                {selectedDeliveryBatch.items.map((item) => (
+                  <article key={item.id} className="batchCard">
+                    <div className="batchCardHeader">
+                      <strong>{item.name}</strong>
+                      <span className={`statusBadge status-${item.status}`}>{item.status}</span>
+                    </div>
+                    <p><strong>Категорія:</strong> {item.category || "—"}</p>
+                    <p><strong>Штрихкод:</strong> {item.barcode || "—"}</p>
+                    <p><strong>Кількість:</strong> {item.quantity}</p>
+                    <p><strong>Термін до:</strong> {item.expiresAt}</p>
+                    <p><strong>Коментар:</strong> {item.notes || "—"}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1246,70 +1373,24 @@ export function App() {
                   <p><strong>Усього партій:</strong> {selectedGroup.batches.length}</p>
                   <p><strong>Сумарна кількість:</strong> {selectedGroup.totalQuantity}</p>
                   <p><strong>Магазини:</strong> {selectedGroup.storeNames.join(", ") || "—"}</p>
-                  <div className="batchList">
-                    {selectedGroup.batches
-                      .slice()
-                      .sort((left, right) => new Date(left.expiresAt).getTime() - new Date(right.expiresAt).getTime())
-                      .map((batch) => (
-                        <article key={batch.id} className={`batchCard ${selectedId === batch.id ? "batchCardSelected" : ""}`}>
-                          <div className="batchCardHeader">
-                            <strong>Партія {batch.batch}</strong>
-                            <span className={`statusBadge status-${batch.status}`}>{batch.status}</span>
-                          </div>
-                          <p><strong>Магазин:</strong> {getStoreName(batch.storeId) || batch.storeName || "—"}</p>
-                          <p><strong>Поставка:</strong> {batch.deliveryBatchLabel || "—"}</p>
-                          <p><strong>Кількість:</strong> {batch.quantity}</p>
-                          <p><strong>Прийняв:</strong> {getEmployeeFullName(batch.receivedByUserId) || batch.receiverFullName || "—"}</p>
-                          <p><strong>Надійшов:</strong> {batch.receivedAt || "—"}</p>
-                          <p><strong>Термін до:</strong> {batch.expiresAt}</p>
-                          <p><strong>Коментар:</strong> {batch.notes || "—"}</p>
-                          <label>
-                            Статус
-                            <select value={batch.status} onChange={(e) => void handleStatusChange(batch.id, e.target.value as ProductStatus)}>
-                              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                            </select>
-                          </label>
-                          <div className="batchActions">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedId(batch.id);
-                                setSelectedDeliveryBatchId(batch.deliveryBatchId ?? null);
-                              }}
-                            >
-                              Відкрити партію
-                            </button>
-                            <button type="button" onClick={() => { setSelectedId(batch.id); void handleTelegramPreview(batch.id); }}>Згенерувати Telegram preview</button>
-                            <button type="button" onClick={() => { setSelectedId(batch.id); void handleTelegramSend(batch.id); }}>Надіслати в Telegram</button>
-                          </div>
-                        </article>
-                      ))}
+                  <p><strong>Найближчий термін:</strong> {selectedGroup.nearestExpiry}</p>
+                  <p><strong>Останнє надходження:</strong> {selectedGroup.latestReceivedAt || "—"}</p>
+                  <div className="batchActions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetBatch = selectedGroup.batches.find((item) => item.deliveryBatchId);
+                        if (targetBatch?.deliveryBatchId) {
+                          setSelectedDeliveryBatchId(targetBatch.deliveryBatchId);
+                          navigate("/delivery-batches");
+                        }
+                      }}
+                    >
+                      Перейти до партії
+                    </button>
+                    <button type="button" onClick={() => void handleTelegramPreview(selectedProduct.id)}>Згенерувати Telegram preview</button>
+                    <button type="button" onClick={() => void handleTelegramSend(selectedProduct.id)}>Надіслати в Telegram</button>
                   </div>
-                  {selectedDeliveryBatch && (
-                    <section className="menuHintBox">
-                      <strong>Склад поставки {selectedDeliveryBatch.label}</strong>
-                      <p>
-                        Магазин: {selectedDeliveryBatch.storeName} · статус: {selectedDeliveryBatch.status === "open" ? "відкрита" : "закрита"}
-                      </p>
-                      <p>
-                        Дата: {selectedDeliveryBatch.deliveryDate} · позицій у поставці: {selectedDeliveryBatch.items.length}
-                      </p>
-                      <div className="batchList">
-                        {selectedDeliveryBatch.items.map((item) => (
-                          <article key={item.id} className="batchCard">
-                            <div className="batchCardHeader">
-                              <strong>{item.name}</strong>
-                              <span className={`statusBadge status-${item.status}`}>{item.status}</span>
-                            </div>
-                            <p><strong>Кількість:</strong> {item.quantity}</p>
-                            <p><strong>Штрихкод:</strong> {item.barcode || "—"}</p>
-                            <p><strong>Термін до:</strong> {item.expiresAt}</p>
-                            <p><strong>Партія товару:</strong> {item.batch}</p>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  )}
                   <button type="button" className="ghostButton" onClick={() => navigate("/settings")}>Відкрити налаштування Telegram</button>
                 </div>
               ) : (
