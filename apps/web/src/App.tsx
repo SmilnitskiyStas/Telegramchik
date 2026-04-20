@@ -322,7 +322,10 @@ export function App() {
           <button
             type="button"
             className={`menuButton ${viewMode === "delivery-batches" ? "menuButtonActive" : ""}`}
-            onClick={() => navigate("/delivery-batches")}
+            onClick={() => {
+              setSelectedDeliveryBatchId(null);
+              navigate("/delivery-batches");
+            }}
           >
             Партії
           </button>
@@ -1379,11 +1382,7 @@ export function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        const targetBatch = selectedGroup.batches.find((item) => item.deliveryBatchId);
-                        if (targetBatch?.deliveryBatchId) {
-                          setSelectedDeliveryBatchId(targetBatch.deliveryBatchId);
-                          navigate("/delivery-batches");
-                        }
+                        navigate("/delivery-batches");
                       }}
                     >
                       Перейти до партії
