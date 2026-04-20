@@ -8,6 +8,7 @@ export type ProductStatus =
 
 export type Product = {
   id: string;
+  productId: string;
   name: string;
   category: string;
   barcode: string;

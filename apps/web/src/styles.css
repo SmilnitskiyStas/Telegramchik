@@ -228,6 +228,38 @@ label {
   line-height: 1.35;
 }
 
+.batchList {
+  display: grid;
+  gap: 12px;
+}
+
+.batchCard {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(23, 50, 77, 0.1);
+  background: #f8fbfd;
+}
+
+.batchCardSelected {
+  border-color: #17324d;
+  box-shadow: 0 8px 24px rgba(23, 50, 77, 0.12);
+}
+
+.batchCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.batchActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .form input,
 .form textarea,
 .form label input,

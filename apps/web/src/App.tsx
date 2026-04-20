@@ -49,6 +49,21 @@ type NotificationSettings = {
   lastSentDate: string | null;
 };
 
+type ProductGroup = {
+  id: string;
+  productId: string;
+  name: string;
+  category: string;
+  barcode: string;
+  imageUrl?: string;
+  batches: Product[];
+  totalQuantity: number;
+  nearestExpiry: string;
+  latestReceivedAt: string;
+  storeNames: string[];
+  worstExpiryState: ExpiryState;
+};
+
 type ExpiryState = "fresh" | "expiring" | "expired";
 type ViewMode = "dashboard" | "receive" | "settings" | "employees" | "store-layout";
 type BarcodeDetectorResult = {
@@ -435,6 +450,65 @@ export function App() {
     [products, selectedId],
   );
 
+  const groupedProducts = useMemo(() => {
+    const groups = new Map<string, ProductGroup>();
+
+    for (const product of products) {
+      const key = product.productId || product.barcode || product.id;
+      const current = groups.get(key);
+
+      if (!current) {
+        groups.set(key, {
+          id: key,
+          productId: product.productId,
+          name: product.name,
+          category: product.category,
+          barcode: product.barcode,
+          imageUrl: product.imageUrl,
+          batches: [product],
+          totalQuantity: product.quantity,
+          nearestExpiry: product.expiresAt,
+          latestReceivedAt: product.receivedAt,
+          storeNames: product.storeName ? [product.storeName] : [],
+          worstExpiryState: getExpiryState(product.expiresAt),
+        });
+        continue;
+      }
+
+      current.batches.push(product);
+      current.totalQuantity += product.quantity;
+      if (new Date(product.expiresAt).getTime() < new Date(current.nearestExpiry).getTime()) {
+        current.nearestExpiry = product.expiresAt;
+      }
+      if (product.receivedAt && new Date(product.receivedAt).getTime() > new Date(current.latestReceivedAt || 0).getTime()) {
+        current.latestReceivedAt = product.receivedAt;
+      }
+      if (product.storeName && !current.storeNames.includes(product.storeName)) {
+        current.storeNames.push(product.storeName);
+      }
+
+      const nextExpiryState = getExpiryState(product.expiresAt);
+      if (
+        (nextExpiryState === "expired" && current.worstExpiryState !== "expired") ||
+        (nextExpiryState === "expiring" && current.worstExpiryState === "fresh")
+      ) {
+        current.worstExpiryState = nextExpiryState;
+      }
+    }
+
+    return Array.from(groups.values()).sort((left, right) => {
+      return new Date(left.nearestExpiry).getTime() - new Date(right.nearestExpiry).getTime();
+    });
+  }, [products]);
+
+  const selectedGroup = useMemo(() => {
+    if (!selectedProduct) {
+      return null;
+    }
+
+    return groupedProducts.find((group) => group.productId === selectedProduct.productId) ?? null;
+  }, [groupedProducts, selectedProduct]);
+
   const selectedEmployee = useMemo(
     () =>
       employees.find((employee) => employee.id === selectedEmployeeId) ??
@@ -444,33 +518,26 @@ export function App() {
   );
 
   const visibleProducts = useMemo(() => {
-    const now = new Date();
-
-    return products.filter((product) => {
-      const expiresAt = new Date(product.expiresAt);
-      const diffDays = Math.ceil(
-        (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      if (filter === "expired") return diffDays < 0;
-      if (filter === "expiring") return diffDays >= 0 && diffDays <= 7;
+    return groupedProducts.filter((group) => {
+      if (filter === "expired") return group.worstExpiryState === "expired";
+      if (filter === "expiring") return group.worstExpiryState === "expiring";
       return true;
     });
-  }, [filter, products]);
+  }, [filter, groupedProducts]);
 
   const summary = useMemo(() => {
-    const expiring = products.filter(
-      (product) => getExpiryState(product.expiresAt) === "expiring",
+    const expiring = groupedProducts.filter(
+      (product) => product.worstExpiryState === "expiring",
     ).length;
-    const expired = products.filter(
-      (product) => getExpiryState(product.expiresAt) === "expired",
+    const expired = groupedProducts.filter(
+      (product) => product.worstExpiryState === "expired",
     ).length;
-    const inProgress = products.filter(
-      (product) => product.status === "в роботі",
+    const inProgress = groupedProducts.filter(
+      (product) => product.batches.some((batch) => batch.status === "в роботі"),
     ).length;
 
-    return { total: products.length, expiring, expired, inProgress };
-  }, [products]);
+    return { total: groupedProducts.length, expiring, expired, inProgress };
+  }, [groupedProducts]);
 
   async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -518,20 +585,22 @@ export function App() {
     setSelectedId(id);
   }
 
-  async function handleTelegramPreview() {
-    if (!selectedProduct) return;
+  async function handleTelegramPreview(productId?: string) {
+    const targetId = productId ?? selectedProduct?.id;
+    if (!targetId) return;
 
-    await fetch(`${API_URL}/telegram/preview/${selectedProduct.id}`, {
+    await fetch(`${API_URL}/telegram/preview/${targetId}`, {
       method: "POST",
     });
 
     window.alert("Тестова Telegram-нотифікація згенерована в API логах.");
   }
 
-  async function handleTelegramSend() {
-    if (!selectedProduct) return;
+  async function handleTelegramSend(productId?: string) {
+    const targetId = productId ?? selectedProduct?.id;
+    if (!targetId) return;
 
-    const response = await fetch(`${API_URL}/telegram/notify/${selectedProduct.id}`, {
+    const response = await fetch(`${API_URL}/telegram/notify/${targetId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId: telegramChatId || undefined }),
@@ -1031,16 +1100,17 @@ export function App() {
                       <span>Статус</span>
                     </div>
                     {visibleProducts.map((product) => {
-                      const expiryState = getExpiryState(product.expiresAt);
+                      const expiryState = product.worstExpiryState;
+                      const isSelected = selectedGroup?.id === product.id;
                       return (
-                        <button key={product.id} className={`tableRow ${selectedId === product.id ? "selected" : ""} ${expiryState}`} onClick={() => setSelectedId(product.id)}>
+                        <button key={product.id} className={`tableRow ${isSelected ? "selected" : ""} ${expiryState}`} onClick={() => setSelectedId(product.batches[0]?.id ?? null)}>
                           <strong>{product.name}</strong>
                           <span>{product.category || "—"}</span>
-                          <span>{product.batch}</span>
-                          <span>{product.quantity}</span>
+                          <span>{product.batches.length} парт.</span>
+                          <span>{product.totalQuantity}</span>
                           <span>{product.barcode || "—"}</span>
-                          <span><span className={`expiryBadge ${expiryState}`}>{product.expiresAt}</span></span>
-                          <span><span className={`statusBadge status-${product.status}`}>{product.status}</span></span>
+                          <span><span className={`expiryBadge ${expiryState}`}>{product.nearestExpiry}</span></span>
+                          <span><span className={`statusBadge status-${product.batches[0]?.status ?? "нове"}`}>{product.batches.length} партій</span></span>
                         </button>
                       );
                     })}
@@ -1052,26 +1122,43 @@ export function App() {
 
             <aside className="panel detailsPanel">
               <h2>Деталі товару</h2>
-              {selectedProduct ? (
+              {selectedProduct && selectedGroup ? (
                 <div className="details">
-                  <p><strong>Назва:</strong> {selectedProduct.name}</p>
-                  <p><strong>Категорія:</strong> {selectedProduct.category || "—"}</p>
-                  <p><strong>Штрихкод:</strong> {selectedProduct.barcode || "—"}</p>
-                  <p><strong>Партія:</strong> {selectedProduct.batch}</p>
-                  <p><strong>Магазин:</strong> {getStoreName(selectedProduct.storeId) || "—"}</p>
-                  <p><strong>Кількість:</strong> {selectedProduct.quantity}</p>
-                  <p><strong>Прийняв:</strong> {getEmployeeFullName(selectedProduct.receivedByUserId) || "—"}</p>
-                  <p><strong>Надійшов:</strong> {selectedProduct.receivedAt}</p>
-                  <p><strong>Термін до:</strong> {selectedProduct.expiresAt}</p>
-                  <p><strong>Коментар:</strong> {selectedProduct.notes || "—"}</p>
-                  <label>
-                    Статус
-                    <select value={selectedProduct.status} onChange={(e) => void handleStatusChange(selectedProduct.id, e.target.value as ProductStatus)}>
-                      {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
-                  </label>
-                  <button type="button" onClick={() => void handleTelegramPreview()}>Згенерувати Telegram preview</button>
-                  <button type="button" onClick={() => void handleTelegramSend()}>Надіслати в Telegram</button>
+                  <p><strong>Назва:</strong> {selectedGroup.name}</p>
+                  <p><strong>Категорія:</strong> {selectedGroup.category || "—"}</p>
+                  <p><strong>Штрихкод:</strong> {selectedGroup.barcode || "—"}</p>
+                  <p><strong>Усього партій:</strong> {selectedGroup.batches.length}</p>
+                  <p><strong>Сумарна кількість:</strong> {selectedGroup.totalQuantity}</p>
+                  <p><strong>Магазини:</strong> {selectedGroup.storeNames.join(", ") || "—"}</p>
+                  <div className="batchList">
+                    {selectedGroup.batches
+                      .slice()
+                      .sort((left, right) => new Date(left.expiresAt).getTime() - new Date(right.expiresAt).getTime())
+                      .map((batch) => (
+                        <article key={batch.id} className={`batchCard ${selectedId === batch.id ? "batchCardSelected" : ""}`}>
+                          <div className="batchCardHeader">
+                            <strong>Партія {batch.batch}</strong>
+                            <span className={`statusBadge status-${batch.status}`}>{batch.status}</span>
+                          </div>
+                          <p><strong>Магазин:</strong> {getStoreName(batch.storeId) || batch.storeName || "—"}</p>
+                          <p><strong>Кількість:</strong> {batch.quantity}</p>
+                          <p><strong>Прийняв:</strong> {getEmployeeFullName(batch.receivedByUserId) || batch.receiverFullName || "—"}</p>
+                          <p><strong>Надійшов:</strong> {batch.receivedAt || "—"}</p>
+                          <p><strong>Термін до:</strong> {batch.expiresAt}</p>
+                          <p><strong>Коментар:</strong> {batch.notes || "—"}</p>
+                          <label>
+                            Статус
+                            <select value={batch.status} onChange={(e) => void handleStatusChange(batch.id, e.target.value as ProductStatus)}>
+                              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                            </select>
+                          </label>
+                          <div className="batchActions">
+                            <button type="button" onClick={() => { setSelectedId(batch.id); void handleTelegramPreview(batch.id); }}>Згенерувати Telegram preview</button>
+                            <button type="button" onClick={() => { setSelectedId(batch.id); void handleTelegramSend(batch.id); }}>Надіслати в Telegram</button>
+                          </div>
+                        </article>
+                      ))}
+                  </div>
                   <button type="button" className="ghostButton" onClick={() => navigate("/settings")}>Відкрити налаштування Telegram</button>
                 </div>
               ) : (
