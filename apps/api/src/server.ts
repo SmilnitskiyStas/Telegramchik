@@ -98,6 +98,8 @@ let telegramState = readTelegramState();
 const webDistPath = webDistCandidates.find((candidate) => fs.existsSync(candidate));
 const databaseConfigured = hasDatabase();
 let databaseEnabled = databaseConfigured;
+let autoNotificationInFlight = false;
+let autoNotificationSentKey: string | null = null;
 
 app.use(cors());
 app.use(express.json());
@@ -348,6 +350,10 @@ function buildTelegramWelcomeMessage(fullName?: string) {
 }
 
 async function runAutomaticNotificationCheck() {
+  if (autoNotificationInFlight) {
+    return;
+  }
+
   const currentSettings = await loadNotificationSettings();
 
   if (!currentSettings.enabled || !currentSettings.chatId) {
@@ -355,12 +361,14 @@ async function runAutomaticNotificationCheck() {
   }
 
   const today = getTodayKey();
+  const currentTime = getCurrentTimeKey();
+  const sendKey = `${today}:${currentSettings.time}:${currentSettings.chatId}`;
 
-  if (currentSettings.lastSentDate === today) {
+  if (currentSettings.lastSentDate === today || autoNotificationSentKey === sendKey) {
     return;
   }
 
-  if (getCurrentTimeKey() !== currentSettings.time) {
+  if (currentTime !== currentSettings.time) {
     return;
   }
 
@@ -370,11 +378,15 @@ async function runAutomaticNotificationCheck() {
   }
 
   try {
+    autoNotificationInFlight = true;
+
     await sendTelegramMessage(
       currentSettings.chatId,
       buildDigestMessage(items, currentSettings.daysBefore),
       getSystemReplyMarkup(),
     );
+
+    autoNotificationSentKey = sendKey;
 
     await persistSettings({
       ...currentSettings,
@@ -382,6 +394,8 @@ async function runAutomaticNotificationCheck() {
     });
   } catch (error) {
     console.error("[AUTO NOTIFY ERROR]", error);
+  } finally {
+    autoNotificationInFlight = false;
   }
 }
 
