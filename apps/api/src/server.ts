@@ -95,6 +95,7 @@ const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const defaultTelegramChatId = process.env.TELEGRAM_CHAT_ID ?? "";
 const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
 const automaticNotificationsEnabled = process.env.AUTO_NOTIFICATIONS_ENABLED === "true";
+const telegramPollingEnabled = process.env.TELEGRAM_POLLING_ENABLED === "true";
 let notificationSettings = readSettings(defaultTelegramChatId);
 let telegramState = readTelegramState();
 const webDistPath = webDistCandidates.find((candidate) => fs.existsSync(candidate));
@@ -441,6 +442,10 @@ async function runAutomaticNotificationCheck() {
 }
 
 async function processTelegramCommands() {
+  if (!telegramPollingEnabled) {
+    return;
+  }
+
   if (!telegramBotToken) {
     return;
   }
@@ -956,9 +961,11 @@ async function bootstrap() {
     }, 60 * 1000);
   }
 
-  setInterval(() => {
-    void processTelegramCommands();
-  }, 15 * 1000);
+  if (telegramPollingEnabled) {
+    setInterval(() => {
+      void processTelegramCommands();
+    }, 15 * 1000);
+  }
 
   app.listen(port, () => {
     console.log(`TelegramChick started on http://localhost:${port}`);
