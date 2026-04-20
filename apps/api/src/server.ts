@@ -94,6 +94,7 @@ const port = Number(process.env.PORT || 3001);
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const defaultTelegramChatId = process.env.TELEGRAM_CHAT_ID ?? "";
 const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
+const automaticNotificationsEnabled = process.env.AUTO_NOTIFICATIONS_ENABLED === "true";
 let notificationSettings = readSettings(defaultTelegramChatId);
 let telegramState = readTelegramState();
 const webDistPath = webDistCandidates.find((candidate) => fs.existsSync(candidate));
@@ -351,6 +352,10 @@ function buildTelegramWelcomeMessage(fullName?: string) {
 }
 
 async function runAutomaticNotificationCheck() {
+  if (!automaticNotificationsEnabled) {
+    return;
+  }
+
   if (autoNotificationInFlight) {
     return;
   }
@@ -924,9 +929,11 @@ async function bootstrap() {
     }
   }
 
-  setInterval(() => {
-    void runAutomaticNotificationCheck();
-  }, 60 * 1000);
+  if (automaticNotificationsEnabled) {
+    setInterval(() => {
+      void runAutomaticNotificationCheck();
+    }, 60 * 1000);
+  }
 
   setInterval(() => {
     void processTelegramCommands();
