@@ -96,6 +96,8 @@ const defaultTelegramChatId = process.env.TELEGRAM_CHAT_ID ?? "";
 const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
 const automaticNotificationsEnabled = process.env.AUTO_NOTIFICATIONS_ENABLED === "true";
 const telegramPollingEnabled = process.env.TELEGRAM_POLLING_ENABLED === "true";
+const telegramWebhookEnabled = process.env.TELEGRAM_WEBHOOK_ENABLED !== "false";
+const telegramWebhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || "";
 let notificationSettings = readSettings(defaultTelegramChatId);
 let telegramState = readTelegramState();
 const webDistPath = webDistCandidates.find((candidate) => fs.existsSync(candidate));
@@ -286,6 +288,10 @@ function hasProcessedTelegramUpdate(updateId: number) {
   return processedTelegramUpdates.has(updateId);
 }
 
+function getTelegramWebhookUrl() {
+  return `${appUrl.replace(/\/+$/, "")}/telegram/webhook`;
+}
+
 async function getProductsForNotification(daysBefore: number) {
   const now = new Date();
   const products = databaseEnabled ? await getProductsFromDatabase() : getJoinedProducts();
@@ -368,6 +374,90 @@ function buildTelegramWelcomeMessage(fullName?: string) {
   ].join("\n");
 }
 
+async function handleTelegramUpdate(update: TelegramUpdate) {
+  const text = update.message?.text?.trim().toLowerCase();
+  const chatId = update.message?.chat?.id;
+  const from = update.message?.from;
+
+  if (typeof update.update_id === "number" && hasProcessedTelegramUpdate(update.update_id)) {
+    return;
+  }
+
+  if (typeof update.update_id === "number") {
+    await persistTelegramState(update.update_id);
+    rememberProcessedTelegramUpdate(update.update_id);
+  }
+
+  if (!text || typeof chatId !== "number") {
+    return;
+  }
+
+  if (text === "/start") {
+    const employee = await registerTelegramEmployeeIfNeeded({
+      chatId: String(chatId),
+      firstName: from?.first_name,
+      lastName: from?.last_name,
+      username: from?.username,
+    });
+
+    await sendTelegramMessage(
+      String(chatId),
+      buildTelegramWelcomeMessage(employee?.fullName),
+      getSystemReplyMarkup(),
+    );
+    return;
+  }
+
+  if (text === "/newproduct" || text === "/addproduct") {
+    const employee = await findEmployeeForChatId(String(chatId));
+
+    if (!employee) {
+      await sendTelegramMessage(
+        String(chatId),
+        "Користувача не знайдено. Спочатку надішліть /start для автоматичної реєстрації.",
+        getSystemReplyMarkup(),
+      );
+      return;
+    }
+
+    await sendTelegramMessage(
+      String(chatId),
+      canUseTelegramUrl(buildReceiveLink(String(chatId)))
+        ? "Відкрийте форму приймання нової партії товару:"
+        : `Форма приймання нової партії товару: ${buildReceiveLink(String(chatId))}`,
+      canUseTelegramUrl(buildReceiveLink(String(chatId)))
+        ? {
+            inline_keyboard: [
+              [
+                {
+                  text: "Додати новий товар",
+                  url: buildReceiveLink(String(chatId))
+                }
+              ]
+            ]
+          }
+        : undefined,
+    );
+  }
+}
+
+async function ensureTelegramWebhook() {
+  if (!telegramWebhookEnabled || !telegramBotToken || !canUseTelegramUrl(appUrl)) {
+    return;
+  }
+
+  const body: Record<string, unknown> = {
+    url: getTelegramWebhookUrl(),
+    drop_pending_updates: true,
+  };
+
+  if (telegramWebhookSecret) {
+    body.secret_token = telegramWebhookSecret;
+  }
+
+  await telegramRequest("setWebhook", body);
+}
+
 async function runAutomaticNotificationCheck() {
   if (!automaticNotificationsEnabled) {
     return;
@@ -442,10 +532,6 @@ async function runAutomaticNotificationCheck() {
 }
 
 async function processTelegramCommands() {
-  if (!telegramPollingEnabled) {
-    return;
-  }
-
   if (!telegramBotToken) {
     return;
   }
@@ -480,70 +566,7 @@ async function processTelegramCommands() {
     }
 
     for (const update of updates) {
-      const text = update.message?.text?.trim().toLowerCase();
-      const chatId = update.message?.chat?.id;
-      const from = update.message?.from;
-
-      if (typeof update.update_id === "number" && hasProcessedTelegramUpdate(update.update_id)) {
-        continue;
-      }
-
-      if (typeof update.update_id === "number") {
-        await persistTelegramState(update.update_id);
-        rememberProcessedTelegramUpdate(update.update_id);
-      }
-
-      if (!text || typeof chatId !== "number") {
-        continue;
-      }
-
-      if (text === "/start") {
-        const employee = await registerTelegramEmployeeIfNeeded({
-          chatId: String(chatId),
-          firstName: from?.first_name,
-          lastName: from?.last_name,
-          username: from?.username,
-        });
-
-        await sendTelegramMessage(
-          String(chatId),
-          buildTelegramWelcomeMessage(employee?.fullName),
-          getSystemReplyMarkup(),
-        );
-        continue;
-      }
-
-      if (text === "/newproduct" || text === "/addproduct") {
-        const employee = await findEmployeeForChatId(String(chatId));
-
-        if (!employee) {
-          await sendTelegramMessage(
-            String(chatId),
-            "Користувача не знайдено. Спочатку надішліть /start для автоматичної реєстрації.",
-            getSystemReplyMarkup(),
-          );
-          continue;
-        }
-
-        await sendTelegramMessage(
-          String(chatId),
-          canUseTelegramUrl(buildReceiveLink(String(chatId)))
-            ? "Відкрийте форму приймання нової партії товару:"
-            : `Форма приймання нової партії товару: ${buildReceiveLink(String(chatId))}`,
-          canUseTelegramUrl(buildReceiveLink(String(chatId)))
-            ? {
-                inline_keyboard: [
-                  [
-                    {
-                      text: "Додати новий товар",
-                      url: buildReceiveLink(String(chatId))
-                    }
-                  ]
-                ]
-              }
-            : undefined,
-        );
-      }
+      await handleTelegramUpdate(update);
     }
   } catch (error) {
     console.error("[TELEGRAM COMMAND POLL ERROR]", error);
@@ -786,6 +809,43 @@ app.get("/telegram/updates", async (_request, response) => {
   }
 });
 
+app.post("/telegram/webhook", async (request, response) => {
+  if (telegramWebhookSecret) {
+    const secretHeader = request.header("x-telegram-bot-api-secret-token");
+    if (secretHeader !== telegramWebhookSecret) {
+      response.status(401).json({ ok: false, message: "Invalid Telegram webhook secret" });
+      return;
+    }
+  }
+
+  try {
+    await handleTelegramUpdate(request.body as TelegramUpdate);
+    response.json({ ok: true });
+  } catch (error) {
+    console.error("[TELEGRAM WEBHOOK ERROR]", error);
+    response.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : "Unknown Telegram webhook error"
+    });
+  }
+});
+
+app.post("/telegram/set-webhook", async (_request, response) => {
+  try {
+    await ensureTelegramWebhook();
+    response.json({
+      ok: true,
+      webhookUrl: getTelegramWebhookUrl(),
+      webhookEnabled: telegramWebhookEnabled,
+    });
+  } catch (error) {
+    response.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : "Unknown Telegram error"
+    });
+  }
+});
+
 app.post("/telegram/delete-webhook", async (_request, response) => {
   try {
     const result = await telegramRequest("deleteWebhook", {
@@ -952,6 +1012,14 @@ async function bootstrap() {
     } catch (error) {
       databaseEnabled = false;
       console.error("[DATABASE BOOTSTRAP ERROR] Falling back to local storage.", error);
+    }
+  }
+
+  if (telegramWebhookEnabled) {
+    try {
+      await ensureTelegramWebhook();
+    } catch (error) {
+      console.error("[TELEGRAM WEBHOOK SETUP ERROR]", error);
     }
   }
 
