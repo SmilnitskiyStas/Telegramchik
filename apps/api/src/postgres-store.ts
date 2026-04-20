@@ -694,6 +694,22 @@ export async function insertNotificationLog(input: {
   );
 }
 
+export async function hasNotificationTypeBeenSentOnDate(
+  notificationType: string,
+  sentDate: string,
+) {
+  const result = await query<{ id: number }>(
+    `select id
+     from notification_log
+     where notification_type = $1
+       and sent_at::date = $2::date
+     limit 1`,
+    [notificationType, sentDate],
+  );
+
+  return Boolean(result.rows[0]);
+}
+
 export async function insertActivityLog(input: {
   userId: string;
   actionType: string;

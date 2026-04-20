@@ -40,6 +40,7 @@ import {
   getProducts as getProductsFromDatabase,
   getStores as getStoresFromDatabase,
   getTelegramState as getTelegramStateFromDatabase,
+  hasNotificationTypeBeenSentOnDate,
   insertNotificationLog,
   registerTelegramUser,
   saveNotificationSettings as saveNotificationSettingsToDatabase,
@@ -368,6 +369,18 @@ async function runAutomaticNotificationCheck() {
     return;
   }
 
+  if (databaseEnabled) {
+    const alreadySentToday = await hasNotificationTypeBeenSentOnDate(
+      "auto_daily_digest",
+      today,
+    );
+
+    if (alreadySentToday) {
+      autoNotificationSentKey = sendKey;
+      return;
+    }
+  }
+
   if (currentTime !== currentSettings.time) {
     return;
   }
@@ -387,6 +400,13 @@ async function runAutomaticNotificationCheck() {
     );
 
     autoNotificationSentKey = sendKey;
+
+    if (databaseEnabled) {
+      await insertNotificationLog({
+        notificationType: "auto_daily_digest",
+        messageText: buildDigestMessage(items, currentSettings.daysBefore),
+      });
+    }
 
     await persistSettings({
       ...currentSettings,
