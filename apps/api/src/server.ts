@@ -86,7 +86,8 @@ const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
 let notificationSettings = readSettings(defaultTelegramChatId);
 let telegramState = readTelegramState();
 const webDistPath = webDistCandidates.find((candidate) => fs.existsSync(candidate));
-const databaseEnabled = hasDatabase();
+const databaseConfigured = hasDatabase();
+let databaseEnabled = databaseConfigured;
 
 app.use(cors());
 app.use(express.json());
@@ -728,9 +729,14 @@ if (webDistPath) {
 }
 
 async function bootstrap() {
-  if (databaseEnabled) {
-    notificationSettings = await loadNotificationSettings();
-    telegramState = await loadTelegramState();
+  if (databaseConfigured) {
+    try {
+      notificationSettings = await loadNotificationSettings();
+      telegramState = await loadTelegramState();
+    } catch (error) {
+      databaseEnabled = false;
+      console.error("[DATABASE BOOTSTRAP ERROR] Falling back to local storage.", error);
+    }
   }
 
   setInterval(() => {

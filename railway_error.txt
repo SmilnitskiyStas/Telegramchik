@@ -1,0 +1,113 @@
+  address: '127.0.0.1',
+/app/node_modules/pg-pool/index.js:45
+  port: 5432
+    Error.captureStackTrace(err)
+          ^
+}
+Error: connect ECONNREFUSED 127.0.0.1:5432
+Node.js v20.20.2
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5432
+}
+Node.js v20.20.2
+/app/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+Starting Container
+Node.js v20.20.2
+/app/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5432
+}
+/app/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5432
+}
+Node.js v20.20.2
+/app/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5432
+}
+Node.js v20.20.2
+/app/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5432
+}
+Node.js v20.20.2
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+/app/node_modules/pg-pool/index.js:45
+  port: 5432
+    Error.captureStackTrace(err)
+}
+          ^
+Node.js v20.20.2
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /app/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getNotificationSettings (file:///app/apps/api/dist/postgres-store.js:214:20)
+    at async loadNotificationSettings (file:///app/apps/api/dist/server.js:53:28)
+    at async bootstrap (file:///app/apps/api/dist/server.js:554:32) {
+  errno: -111,
