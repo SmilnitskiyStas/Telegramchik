@@ -46,7 +46,9 @@ import {
   registerTelegramUser,
   saveNotificationSettings as saveNotificationSettingsToDatabase,
   saveTelegramState as saveTelegramStateToDatabase,
+  updateEmployee as updateEmployeeInDatabase,
   updateProductStatus as updateProductStatusInDatabase,
+  updateStore as updateStoreInDatabase,
 } from "./postgres-store.js";
 import { Product, ProductStatus } from "./types.js";
 
@@ -632,6 +634,51 @@ app.post("/stores", async (request, response) => {
   response.status(201).json(created);
 });
 
+app.put("/stores/:id", async (request, response) => {
+  const body = request.body as Partial<{
+    code: string;
+    name: string;
+    isActive: boolean;
+  }>;
+
+  const code = String(body.code ?? "").trim();
+  const name = String(body.name ?? "").trim();
+  const isActive = Boolean(body.isActive);
+
+  if (!code || !name) {
+    response.status(400).json({ message: "Store code and name are required" });
+    return;
+  }
+
+  if (databaseEnabled) {
+    try {
+      const updated = await updateStoreInDatabase(request.params.id, { code, name, isActive });
+      if (!updated) {
+        response.status(404).json({ message: "Store not found" });
+        return;
+      }
+      response.json(updated);
+      return;
+    } catch (error) {
+      response.status(400).json({
+        message: error instanceof Error ? error.message : "Failed to update store",
+      });
+      return;
+    }
+  }
+
+  const target = stores.find((store) => store.id === request.params.id);
+  if (!target) {
+    response.status(404).json({ message: "Store not found" });
+    return;
+  }
+
+  target.code = code;
+  target.name = name;
+  target.isActive = isActive;
+  response.json(target);
+});
+
 app.get("/delivery-batches", async (request, response) => {
   if (!databaseEnabled) {
     response.status(501).json({ ok: false, message: "Delivery batches require database mode" });
@@ -707,6 +754,70 @@ app.get("/employees/by-chat/:chatId", async (request, response) => {
   }
 
   response.json(employee);
+});
+
+app.put("/employees/:id", async (request, response) => {
+  const body = request.body as Partial<{
+    name: string;
+    surname: string;
+    role: string;
+    storeId: string;
+    telegramClientId: string;
+    isActive: boolean;
+  }>;
+
+  const name = String(body.name ?? "").trim();
+  const surname = String(body.surname ?? "").trim();
+  const role = String(body.role ?? "").trim();
+  const storeId = String(body.storeId ?? "").trim();
+  const telegramClientId = String(body.telegramClientId ?? "").trim();
+  const isActive = Boolean(body.isActive);
+
+  if (!name || !surname || !role || !storeId || !telegramClientId) {
+    response.status(400).json({ message: "Employee fields are required" });
+    return;
+  }
+
+  if (databaseEnabled) {
+    try {
+      const updated = await updateEmployeeInDatabase(request.params.id, {
+        name,
+        surname,
+        role,
+        storeId,
+        telegramClientId,
+        isActive,
+      });
+      if (!updated) {
+        response.status(404).json({ message: "Employee not found" });
+        return;
+      }
+      response.json(updated);
+      return;
+    } catch (error) {
+      response.status(400).json({
+        message: error instanceof Error ? error.message : "Failed to update employee",
+      });
+      return;
+    }
+  }
+
+  const target = employees.find((employee) => employee.id === request.params.id);
+  if (!target) {
+    response.status(404).json({ message: "Employee not found" });
+    return;
+  }
+
+  const nextStore = findStoreById(storeId);
+  target.name = name;
+  target.surname = surname;
+  target.fullName = `${name} ${surname}`.trim();
+  target.role = role;
+  target.storeId = storeId;
+  target.storeName = nextStore?.name ?? target.storeName;
+  target.telegramClientId = telegramClientId;
+  target.status = isActive ? "на зміні" : "відсутній";
+  response.json(target);
 });
 
 app.post("/products", async (request, response) => {

@@ -225,6 +225,31 @@ export async function createStore(input: {
   return mapStore(result.rows[0]);
 }
 
+export async function updateStore(
+  id: string,
+  input: {
+    code: string;
+    name: string;
+    isActive: boolean;
+  },
+) {
+  const result = await query<StoreRow>(
+    `update stores
+     set store_code = $2,
+         store_name = $3,
+         is_active = $4
+     where id = $1::bigint
+     returning
+       id,
+       store_code as code,
+       coalesce(store_name, store_code) as name,
+       is_active`,
+    [Number(id), input.code.trim(), input.name.trim(), input.isActive],
+  );
+
+  return result.rows[0] ? mapStore(result.rows[0]) : null;
+}
+
 export async function getEmployees() {
   const result = await query<EmployeeRow>(
     `select id, name, surname, full_name, role, store_id, store_name, telegram_client_id, status, last_activity_at, last_action, activity_log
@@ -254,6 +279,45 @@ export async function getEmployeeById(id: string) {
     [Number(id)],
   );
   return result.rows[0] ? mapEmployee(result.rows[0]) : null;
+}
+
+export async function updateEmployee(
+  id: string,
+  input: {
+    name: string;
+    surname: string;
+    role: string;
+    storeId: string;
+    telegramClientId: string;
+    isActive: boolean;
+  },
+) {
+  const result = await query<EmployeeRow>(
+    `update users
+     set name = $2,
+         surname = $3,
+         role = $4::user_role,
+         store_id = $5::bigint,
+         user_chat_id = $6::bigint,
+         is_active = $7
+     where id = $1::bigint
+     returning id`,
+    [
+      Number(id),
+      input.name.trim(),
+      input.surname.trim(),
+      input.role.trim() || "user",
+      Number(input.storeId),
+      Number(input.telegramClientId),
+      input.isActive,
+    ],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  return getEmployeeById(id);
 }
 
 async function ensureTelegramRegistrationStore() {

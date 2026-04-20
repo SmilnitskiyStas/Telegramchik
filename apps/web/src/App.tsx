@@ -150,6 +150,7 @@ export function App() {
   const [stores, setStores] = useState<Store[]>([]);
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(
     new URLSearchParams(window.location.search).get("productId"),
   );
@@ -167,9 +168,24 @@ export function App() {
     name: "",
     isActive: true,
   });
+  const [storeEditForm, setStoreEditForm] = useState({
+    code: "",
+    name: "",
+    isActive: true,
+  });
+  const [employeeEditForm, setEmployeeEditForm] = useState({
+    name: "",
+    surname: "",
+    role: "user",
+    storeId: "",
+    telegramClientId: "",
+    isActive: true,
+  });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submittingStore, setSubmittingStore] = useState(false);
+  const [savingStore, setSavingStore] = useState(false);
+  const [savingEmployee, setSavingEmployee] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerBusy, setScannerBusy] = useState(false);
@@ -430,6 +446,7 @@ export function App() {
     const response = await fetch(`${API_URL}/stores`);
     const data = (await response.json()) as Store[];
     setStores(data);
+    setSelectedStoreId((current) => current ?? data[0]?.id ?? null);
   }
 
   async function loadDeliveryBatches(storeId?: string) {
@@ -614,6 +631,11 @@ export function App() {
     [employees, selectedEmployeeId],
   );
 
+  const selectedStore = useMemo(
+    () => stores.find((store) => store.id === selectedStoreId) ?? stores[0] ?? null,
+    [stores, selectedStoreId],
+  );
+
   const visibleProducts = useMemo(() => {
     return groupedProducts.filter((group) => {
       if (filter === "expired") return group.worstExpiryState === "expired";
@@ -641,6 +663,33 @@ export function App() {
     const closed = deliveryBatches.filter((batch) => batch.status === "closed").length;
     return { total: deliveryBatches.length, active, closed };
   }, [deliveryBatches]);
+
+  useEffect(() => {
+    if (!selectedEmployee) {
+      return;
+    }
+
+    setEmployeeEditForm({
+      name: selectedEmployee.name,
+      surname: selectedEmployee.surname,
+      role: selectedEmployee.role === "admin" || selectedEmployee.role === "manager" ? selectedEmployee.role : "user",
+      storeId: selectedEmployee.storeId,
+      telegramClientId: selectedEmployee.telegramClientId,
+      isActive: selectedEmployee.status !== "відсутній",
+    });
+  }, [selectedEmployee]);
+
+  useEffect(() => {
+    if (!selectedStore) {
+      return;
+    }
+
+    setStoreEditForm({
+      code: selectedStore.code,
+      name: selectedStore.name,
+      isActive: selectedStore.isActive,
+    });
+  }, [selectedStore]);
 
   async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -743,6 +792,56 @@ export function App() {
     });
     await loadStores();
     window.alert(`Магазин ${data.name} додано.`);
+  }
+
+  async function handleUpdateStore(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedStore) {
+      return;
+    }
+
+    setSavingStore(true);
+    const response = await fetch(`${API_URL}/stores/${selectedStore.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(storeEditForm),
+    });
+
+    const data = (await response.json()) as Store & { message?: string };
+    setSavingStore(false);
+
+    if (!response.ok) {
+      window.alert(data.message ?? "Не вдалося оновити магазин.");
+      return;
+    }
+
+    await loadStores();
+    window.alert(`Магазин ${data.name} оновлено.`);
+  }
+
+  async function handleUpdateEmployee(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedEmployee) {
+      return;
+    }
+
+    setSavingEmployee(true);
+    const response = await fetch(`${API_URL}/employees/${selectedEmployee.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(employeeEditForm),
+    });
+
+    const data = (await response.json()) as Employee & { message?: string };
+    setSavingEmployee(false);
+
+    if (!response.ok) {
+      window.alert(data.message ?? "Не вдалося оновити користувача.");
+      return;
+    }
+
+    await loadEmployees();
+    window.alert(`Користувача ${data.fullName} оновлено.`);
   }
 
   async function handleTelegramPreview(productId?: string) {
@@ -1139,16 +1238,48 @@ export function App() {
       <aside className="employeeDetailsPanel">
         <h2>Картка співробітника</h2>
         {selectedEmployee ? (
-          <div className="employeeDetails">
+          <form className="employeeDetails" onSubmit={handleUpdateEmployee}>
             <div className="employeeMetaGrid">
-              <p><strong>Ім'я:</strong> {selectedEmployee.fullName}</p>
-              <p><strong>Роль:</strong> {selectedEmployee.role}</p>
-              <p><strong>Магазин:</strong> {selectedEmployee.storeName}</p>
-              <p><strong>Telegram ID:</strong> {selectedEmployee.telegramClientId}</p>
-              <p><strong>Статус:</strong> <span className={`statusBadge employee-status-${selectedEmployee.status}`}>{selectedEmployee.status}</span></p>
+              <label className="fieldBlock">
+                <span className="fieldLabel">Ім'я</span>
+                <input value={employeeEditForm.name} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, name: event.target.value }))} />
+              </label>
+              <label className="fieldBlock">
+                <span className="fieldLabel">Прізвище</span>
+                <input value={employeeEditForm.surname} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, surname: event.target.value }))} />
+              </label>
+              <label className="fieldBlock">
+                <span className="fieldLabel">Роль</span>
+                <select value={employeeEditForm.role} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, role: event.target.value }))}>
+                  <option value="user">user</option>
+                  <option value="manager">manager</option>
+                  <option value="admin">admin</option>
+                </select>
+              </label>
+              <label className="fieldBlock">
+                <span className="fieldLabel">Магазин</span>
+                <select value={employeeEditForm.storeId} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, storeId: event.target.value }))}>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name} · {store.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="fieldBlock">
+                <span className="fieldLabel">Telegram ID</span>
+                <input value={employeeEditForm.telegramClientId} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, telegramClientId: event.target.value }))} />
+              </label>
+              <label className="checkboxRow">
+                <input type="checkbox" checked={employeeEditForm.isActive} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, isActive: event.target.checked }))} />
+                <span>Активний користувач</span>
+              </label>
               <p><strong>Остання активність:</strong> {selectedEmployee.lastActivityAt}</p>
               <p className="employeeLastAction"><strong>Остання дія:</strong> {selectedEmployee.lastAction}</p>
             </div>
+            <button type="submit" disabled={savingEmployee}>
+              {savingEmployee ? "Збереження..." : "Зберегти користувача"}
+            </button>
             <div className="employeeActivityBlock">
               <h3>Останні дії</h3>
               <div className="employeeActivityList">
@@ -1160,7 +1291,7 @@ export function App() {
                 ))}
               </div>
             </div>
-          </div>
+          </form>
         ) : (
           <p>Оберіть співробітника зі списку.</p>
         )}
@@ -1244,7 +1375,7 @@ export function App() {
                 <span></span>
               </div>
               {stores.map((store) => (
-                <article key={store.id} className="tableRow deliveryBatchRow">
+                <button key={store.id} type="button" className={`tableRow deliveryBatchRow ${selectedStore?.id === store.id ? "selected" : ""}`} onClick={() => setSelectedStoreId(store.id)}>
                   <strong>{store.code}</strong>
                   <span>{store.name}</span>
                   <span>
@@ -1256,7 +1387,7 @@ export function App() {
                   <span></span>
                   <span></span>
                   <span></span>
-                </article>
+                </button>
               ))}
               {!stores.length && <p className="emptyState">Поки що немає магазинів.</p>}
             </div>
@@ -1264,6 +1395,38 @@ export function App() {
         </section>
 
         <aside className="employeeDetailsPanel">
+          <h2>Редагування магазину</h2>
+          <form className="details" onSubmit={handleUpdateStore}>
+            <label className="fieldBlock">
+              <span className="fieldLabel">Код магазину</span>
+              <input
+                placeholder="Наприклад: M4"
+                value={storeEditForm.code}
+                onChange={(event) => setStoreEditForm((current) => ({ ...current, code: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="fieldBlock">
+              <span className="fieldLabel">Назва магазину</span>
+              <input
+                placeholder="Наприклад: Магазин Центр"
+                value={storeEditForm.name}
+                onChange={(event) => setStoreEditForm((current) => ({ ...current, name: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={storeEditForm.isActive}
+                onChange={(event) => setStoreEditForm((current) => ({ ...current, isActive: event.target.checked }))}
+              />
+              <span>Магазин активний</span>
+            </label>
+            <button type="submit" disabled={savingStore || !selectedStore}>
+              {savingStore ? "Збереження..." : "Зберегти магазин"}
+            </button>
+          </form>
           <h2>Додати магазин</h2>
           <form className="details" onSubmit={handleCreateStore}>
             <label className="fieldBlock">
@@ -1301,82 +1464,79 @@ export function App() {
     </section>
   );
 
-  if (viewMode === "receive") {
+  function renderPageShell(input: {
+    eyebrow: string;
+    title: string;
+    text: string;
+    content: React.ReactNode;
+    compact?: boolean;
+    summary?: React.ReactNode;
+  }) {
     return (
       <div className="page receivePage">
-        <section className="hero heroCompact">
+        <section className={`hero ${input.compact ? "heroCompact" : ""}`}>
           <div>
-            <p className="eyebrow">Приймання партії</p>
-            <h1>Додати новий товар у систему</h1>
-            <p className="heroText">Цю форму можна відкривати прямо з Telegram-команди. Для бота використовуйте `/newproduct` або `/addproduct`.</p>
+            <p className="eyebrow">{input.eyebrow}</p>
+            <h1>{input.title}</h1>
+            <p className="heroText">{input.text}</p>
           </div>
         </section>
+        {input.summary}
         <section className="appShell">
           {renderSidebar()}
-          <div className="receiveLayout">
-            <div className="panel receivePanel">
-              <div className="receiveHeader">
-                <h2>Нова партія товару</h2>
-                <button type="button" onClick={() => navigate("/")} className="ghostButton">Повернутись до dashboard</button>
-              </div>
-              {productForm}
-            </div>
-          </div>
+          <div className="pageSectionContent">{input.content}</div>
         </section>
       </div>
     );
+  }
+
+  if (viewMode === "receive") {
+    return renderPageShell({
+      eyebrow: "Приймання партії",
+      title: "Додати новий товар у систему",
+      text: "Цю форму можна відкривати прямо з Telegram-команди. Для бота використовуйте `/newproduct` або `/addproduct`.",
+      compact: true,
+      content: (
+        <div className="receiveLayout">
+          <div className="panel receivePanel">
+            <div className="receiveHeader">
+              <h2>Нова партія товару</h2>
+              <button type="button" onClick={() => navigate("/")} className="ghostButton">Повернутись до dashboard</button>
+            </div>
+            {productForm}
+          </div>
+        </div>
+      ),
+    });
   }
 
   if (viewMode === "settings") {
-    return (
-      <div className="page receivePage">
-        <section className="hero">
-          <div>
-            <p className="eyebrow">Налаштування</p>
-            <h1>Синхронізація з Telegram</h1>
-            <p className="heroText">Тут налаштовується отримання `chat_id`, робота команд бота і автоматичні сповіщення.</p>
-          </div>
-        </section>
-        <section className="appShell">
-          {renderSidebar()}
-          <div className="pageSectionContent">{settingsContent}</div>
-        </section>
-      </div>
-    );
+    return renderPageShell({
+      eyebrow: "Налаштування",
+      title: "Синхронізація з Telegram",
+      text: "Тут налаштовується отримання `chat_id`, робота команд бота і автоматичні сповіщення.",
+      content: settingsContent,
+    });
   }
 
   if (viewMode === "employees") {
-    return (
-      <div className="page receivePage">
-        <section className="hero">
-          <div>
-            <p className="eyebrow">Користувачі</p>
-            <h1>Співробітники і магазини</h1>
-            <p className="heroText">Тут видно, хто де працює, за яким магазином закріплений і коли востаннє виконував дію в системі.</p>
-          </div>
-        </section>
-        <section className="appShell">
-          {renderSidebar()}
-          <div className="pageSectionContent">{employeesContent}</div>
-        </section>
-      </div>
-    );
+    return renderPageShell({
+      eyebrow: "Користувачі",
+      title: "Співробітники і магазини",
+      text: "Тут видно, хто де працює, за яким магазином закріплений і коли востаннє виконував дію в системі.",
+      content: employeesContent,
+    });
   }
 
   if (viewMode === "delivery-batches") {
     return (
-      <div className="page receivePage">
-        <section className="hero">
-          <div>
-            <p className="eyebrow">Партії</p>
-            <h1>Журнал поставок</h1>
-            <p className="heroText">Тут видно всі створені партії поставок, активні та закриті, і склад кожної партії окремо.</p>
-          </div>
-        </section>
-        <section className="appShell">
-          {renderSidebar()}
-          <div className="pageSectionContent">{deliveryBatchesContent}</div>
-        </section>
+      <>
+        {renderPageShell({
+          eyebrow: "Партії",
+          title: "Журнал поставок",
+          text: "Тут видно всі створені партії поставок, активні та закриті, і склад кожної партії окремо.",
+          content: deliveryBatchesContent,
+        })}
         {selectedDeliveryBatch && (
           <div className="modalOverlay" onClick={() => setSelectedDeliveryBatchId(null)}>
             <div className="modalCard" onClick={(event) => event.stopPropagation()}>
@@ -1410,56 +1570,42 @@ export function App() {
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 
   if (viewMode === "store-layout") {
-    return <StoreLayoutPage onBack={() => navigate("/")} products={products} />;
+    return renderPageShell({
+      eyebrow: "Карта магазину",
+      title: "Розміщення товарів",
+      text: "Схема магазину та швидкий перегляд розміщення товарів за поточними даними.",
+      content: <StoreLayoutPage onBack={() => navigate("/")} products={products} />,
+    });
   }
 
   if (viewMode === "stores") {
-    return (
-      <div className="page receivePage">
-        <section className="hero">
-          <div>
-            <p className="eyebrow">Магазини</p>
-            <h1>Список магазинів</h1>
-            <p className="heroText">Тут видно магазини, які є в базі, і можна додати новий магазин для подальшої роботи в системі.</p>
-          </div>
-        </section>
-        <section className="appShell">
-          {renderSidebar()}
-          <div className="pageSectionContent">{storesContent}</div>
-        </section>
-      </div>
-    );
+    return renderPageShell({
+      eyebrow: "Магазини",
+      title: "Список магазинів",
+      text: "Тут видно магазини, які є в базі, і можна додати або відредагувати магазин для подальшої роботи в системі.",
+      content: storesContent,
+    });
   }
 
-  return (
-    <div className="page">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">TelegramChick</p>
-          <h1>Простий тестовий MVP контролю термінів придатності</h1>
-          <p className="heroText">Додавайте товари, контролюйте статуси і перевіряйте сценарій майбутніх Telegram-сповіщень без зайвої складності.</p>
-          <div className="heroActions">
-            <button type="button" onClick={() => navigate("/receive")} className="lightButton">Прийняти нову партію</button>
-          </div>
-        </div>
-      </section>
-
+  return renderPageShell({
+    eyebrow: "TelegramChick",
+    title: "Простий тестовий MVP контролю термінів придатності",
+    text: "Додавайте товари, контролюйте статуси і перевіряйте сценарій майбутніх Telegram-сповіщень без зайвої складності.",
+    summary: (
       <section className="summaryGrid">
         <article className="summaryCard neutral"><span className="summaryLabel">Усього товарів</span><strong className="summaryValue">{summary.total}</strong></article>
         <article className="summaryCard warning"><span className="summaryLabel">Скоро спливають</span><strong className="summaryValue">{summary.expiring}</strong></article>
         <article className="summaryCard danger"><span className="summaryLabel">Прострочені</span><strong className="summaryValue">{summary.expired}</strong></article>
         <article className="summaryCard info"><span className="summaryLabel">В роботі</span><strong className="summaryValue">{summary.inProgress}</strong></article>
       </section>
-
-      <section className="appShell">
-        {renderSidebar()}
-        <div className="pageSectionContent">
-          <section className="layout">
+    ),
+    content: (
+      <section className="layout">
             <main className="panel">
               <div className="toolbar">
                 <div className="toolbarTitle">
@@ -1540,11 +1686,9 @@ export function App() {
                 <p>Оберіть товар зі списку.</p>
               )}
             </aside>
-          </section>
-        </div>
       </section>
-    </div>
-  );
+    ),
+  });
 }
 
 
