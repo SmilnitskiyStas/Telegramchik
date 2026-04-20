@@ -30,6 +30,26 @@ export type ProductBatch = {
 export type Product = ProductCatalogItem &
   Omit<ProductBatch, "productId"> & {
     productId: string;
+    deliveryBatchId?: string;
+    deliveryBatchLabel?: string;
+    deliveryBatchNumber?: number;
     storeName?: string;
     receiverFullName?: string;
   };
+
+export type DeliveryBatchStatus = "open" | "closed";
+
+export type DeliveryBatch = {
+  id: string;
+  storeId: string;
+  storeName: string;
+  deliveryDate: string;
+  batchNumber: number;
+  status: DeliveryBatchStatus;
+  label: string;
+  createdByUserId?: string;
+  createdByFullName?: string;
+  createdAt: string;
+  closedAt?: string | null;
+  items: Product[];
+};

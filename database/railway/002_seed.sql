@@ -32,9 +32,17 @@ set article = excluded.article,
     category = excluded.category,
     image_url = excluded.image_url;
 
+insert into delivery_batches (store_id, created_by_user_id, delivery_date, batch_number, status)
+select s.id, u.id, date '2026-04-10', 1, 'closed'::delivery_batch_status
+from stores s
+join users u on u.user_chat_id = 5358869619
+where s.store_code = 'M2'
+on conflict (store_id, delivery_date, batch_number) do nothing;
+
 insert into product_batches (
   product_id,
   store_id,
+  delivery_batch_id,
   quantity,
   expiry_date,
   delivery_date,
@@ -48,6 +56,7 @@ insert into product_batches (
 select
   p.id,
   s.id,
+  db.id,
   v.quantity,
   v.expiry_date,
   v.delivery_date,
@@ -65,8 +74,10 @@ from (
 join products p on p.barcode = v.barcode
 join stores s on s.store_code = v.store_code
 join users u on u.user_chat_id = v.user_chat_id
+left join delivery_batches db on db.store_id = s.id and db.delivery_date = date '2026-04-10' and db.batch_number = 1
 on conflict (product_id, store_id, expiry_date) do update
 set quantity = excluded.quantity,
+    delivery_batch_id = excluded.delivery_batch_id,
     delivery_date = excluded.delivery_date,
     notified = excluded.notified,
     notified_days = excluded.notified_days,

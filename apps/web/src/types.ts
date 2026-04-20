@@ -9,6 +9,9 @@ export type ProductStatus =
 export type Product = {
   id: string;
   productId: string;
+  deliveryBatchId?: string;
+  deliveryBatchLabel?: string;
+  deliveryBatchNumber?: number;
   name: string;
   category: string;
   barcode: string;
@@ -23,4 +26,23 @@ export type Product = {
   notes: string;
   receivedByUserId: string;
   receiverFullName?: string;
+};
+
+export type DeliveryBatchStatus = "open" | "closed";
+
+export type DeliveryBatchItem = Product;
+
+export type DeliveryBatch = {
+  id: string;
+  storeId: string;
+  storeName: string;
+  deliveryDate: string;
+  batchNumber: number;
+  status: DeliveryBatchStatus;
+  label: string;
+  createdByUserId?: string;
+  createdByFullName?: string;
+  createdAt: string;
+  closedAt?: string | null;
+  items: DeliveryBatchItem[];
 };

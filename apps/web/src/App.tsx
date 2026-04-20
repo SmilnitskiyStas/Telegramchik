@@ -1,5 +1,5 @@
 ﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Product, ProductStatus } from "./types";
+import { DeliveryBatch, Product, ProductStatus } from "./types";
 import { StoreLayoutPage } from "./StoreLayoutPage";
 
 const API_URL =
@@ -139,10 +139,12 @@ export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(
     new URLSearchParams(window.location.search).get("productId"),
   );
+  const [selectedDeliveryBatchId, setSelectedDeliveryBatchId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "expiring" | "expired">("all");
   const [telegramChatId, setTelegramChatId] = useState("");
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(
@@ -398,10 +400,24 @@ export function App() {
     setStores(data);
   }
 
+  async function loadDeliveryBatches(storeId?: string) {
+    const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
+    const response = await fetch(`${API_URL}/delivery-batches${query}`);
+
+    if (!response.ok) {
+      setDeliveryBatches([]);
+      return;
+    }
+
+    const data = (await response.json()) as DeliveryBatch[];
+    setDeliveryBatches(data);
+  }
+
   useEffect(() => {
     void loadProducts();
     void loadEmployees();
     void loadStores();
+    void loadDeliveryBatches();
   }, []);
 
   useEffect(() => {
@@ -425,6 +441,14 @@ export function App() {
       storeId: current.storeId || matchedEmployee.storeId,
     }));
   }, [employees]);
+
+  useEffect(() => {
+    if (!form.storeId) {
+      return;
+    }
+
+    void loadDeliveryBatches(form.storeId);
+  }, [form.storeId]);
 
   useEffect(() => {
     async function loadNotificationSettings() {
@@ -509,6 +533,39 @@ export function App() {
     return groupedProducts.find((group) => group.productId === selectedProduct.productId) ?? null;
   }, [groupedProducts, selectedProduct]);
 
+  useEffect(() => {
+    if (!selectedGroup?.batches.length) {
+      return;
+    }
+
+    const firstBatchWithDelivery = selectedGroup.batches.find((batch) => batch.deliveryBatchId);
+    if (firstBatchWithDelivery?.deliveryBatchId) {
+      setSelectedDeliveryBatchId(firstBatchWithDelivery.deliveryBatchId);
+    }
+  }, [selectedGroup]);
+
+  const selectedDeliveryBatch = useMemo(() => {
+    if (!selectedDeliveryBatchId) {
+      return null;
+    }
+
+    return (
+      deliveryBatches.find((batch) => batch.id === selectedDeliveryBatchId) ?? null
+    );
+  }, [deliveryBatches, selectedDeliveryBatchId]);
+
+  const currentOpenDeliveryBatch = useMemo(() => {
+    if (!form.storeId) {
+      return null;
+    }
+
+    return (
+      deliveryBatches.find(
+        (batch) => batch.storeId === form.storeId && batch.status === "open",
+      ) ?? null
+    );
+  }, [deliveryBatches, form.storeId]);
+
   const selectedEmployee = useMemo(
     () =>
       employees.find((employee) => employee.id === selectedEmployeeId) ??
@@ -554,7 +611,9 @@ export function App() {
     setForm(createEmptyForm());
     await loadProducts();
     await loadEmployees();
+    await loadDeliveryBatches();
     setSelectedId(created.id);
+    setSelectedDeliveryBatchId(created.deliveryBatchId ?? null);
     setSubmitting(false);
 
     if (viewMode === "receive") {
@@ -583,6 +642,34 @@ export function App() {
     await loadProducts();
     await loadEmployees();
     setSelectedId(id);
+  }
+
+  async function handleCloseCurrentDeliveryBatch() {
+    if (!form.storeId) {
+      window.alert("Спочатку оберіть магазин для поточної поставки.");
+      return;
+    }
+
+    const response = await fetch(`${API_URL}/delivery-batches/current/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storeId: form.storeId }),
+    });
+
+    const data = (await response.json()) as {
+      ok?: boolean;
+      message?: string;
+      batch?: DeliveryBatch | null;
+    };
+
+    if (!response.ok || !data.ok) {
+      window.alert(data.message ?? "Не вдалося закрити поточну партію поставки.");
+      return;
+    }
+
+    await loadDeliveryBatches(form.storeId);
+    setSelectedDeliveryBatchId(data.batch?.id ?? null);
+    window.alert("Поточну партію поставки закрито. Наступне надходження піде в нову партію.");
   }
 
   async function handleTelegramPreview(productId?: string) {
@@ -827,6 +914,35 @@ export function App() {
           <span className="fieldHint">Кінцева дата придатності товару з упаковки або документів.</span>
           <input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} required />
         </label>
+      </div>
+
+      <div className="menuHintBox">
+        <strong>Поточна поставка</strong>
+        {form.storeId ? (
+          <>
+            <p>
+              {currentOpenDeliveryBatch
+                ? `Відкрита поставка: ${currentOpenDeliveryBatch.label}. Усі нові товари для цього магазину підуть саме в неї, поки ти її не закриєш.`
+                : "Для цього магазину зараз немає відкритої поставки. Перший доданий товар створить нову поставку автоматично."}
+            </p>
+            {currentOpenDeliveryBatch && (
+              <div className="batchActions">
+                <button
+                  type="button"
+                  className="ghostButton"
+                  onClick={() => setSelectedDeliveryBatchId(currentOpenDeliveryBatch.id)}
+                >
+                  Відкрити партію
+                </button>
+                <button type="button" className="ghostButton" onClick={() => void handleCloseCurrentDeliveryBatch()}>
+                  Закрити партію
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <p>Оберіть магазин, щоб система показала активну поставку і номер поточної партії.</p>
+        )}
       </div>
 
       <label className="fieldBlock">
@@ -1141,6 +1257,7 @@ export function App() {
                             <span className={`statusBadge status-${batch.status}`}>{batch.status}</span>
                           </div>
                           <p><strong>Магазин:</strong> {getStoreName(batch.storeId) || batch.storeName || "—"}</p>
+                          <p><strong>Поставка:</strong> {batch.deliveryBatchLabel || "—"}</p>
                           <p><strong>Кількість:</strong> {batch.quantity}</p>
                           <p><strong>Прийняв:</strong> {getEmployeeFullName(batch.receivedByUserId) || batch.receiverFullName || "—"}</p>
                           <p><strong>Надійшов:</strong> {batch.receivedAt || "—"}</p>
@@ -1153,12 +1270,46 @@ export function App() {
                             </select>
                           </label>
                           <div className="batchActions">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedId(batch.id);
+                                setSelectedDeliveryBatchId(batch.deliveryBatchId ?? null);
+                              }}
+                            >
+                              Відкрити партію
+                            </button>
                             <button type="button" onClick={() => { setSelectedId(batch.id); void handleTelegramPreview(batch.id); }}>Згенерувати Telegram preview</button>
                             <button type="button" onClick={() => { setSelectedId(batch.id); void handleTelegramSend(batch.id); }}>Надіслати в Telegram</button>
                           </div>
                         </article>
                       ))}
                   </div>
+                  {selectedDeliveryBatch && (
+                    <section className="menuHintBox">
+                      <strong>Склад поставки {selectedDeliveryBatch.label}</strong>
+                      <p>
+                        Магазин: {selectedDeliveryBatch.storeName} · статус: {selectedDeliveryBatch.status === "open" ? "відкрита" : "закрита"}
+                      </p>
+                      <p>
+                        Дата: {selectedDeliveryBatch.deliveryDate} · позицій у поставці: {selectedDeliveryBatch.items.length}
+                      </p>
+                      <div className="batchList">
+                        {selectedDeliveryBatch.items.map((item) => (
+                          <article key={item.id} className="batchCard">
+                            <div className="batchCardHeader">
+                              <strong>{item.name}</strong>
+                              <span className={`statusBadge status-${item.status}`}>{item.status}</span>
+                            </div>
+                            <p><strong>Кількість:</strong> {item.quantity}</p>
+                            <p><strong>Штрихкод:</strong> {item.barcode || "—"}</p>
+                            <p><strong>Термін до:</strong> {item.expiresAt}</p>
+                            <p><strong>Партія товару:</strong> {item.batch}</p>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                   <button type="button" className="ghostButton" onClick={() => navigate("/settings")}>Відкрити налаштування Telegram</button>
                 </div>
               ) : (

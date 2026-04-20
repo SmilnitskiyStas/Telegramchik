@@ -28,6 +28,10 @@ import {
 import { hasDatabase } from "./db.js";
 import {
   createProduct as createProductInDatabase,
+  closeCurrentDeliveryBatch as closeCurrentDeliveryBatchInDatabase,
+  getCurrentOpenDeliveryBatch as getCurrentOpenDeliveryBatchFromDatabase,
+  getDeliveryBatchById as getDeliveryBatchByIdFromDatabase,
+  getDeliveryBatches as getDeliveryBatchesFromDatabase,
   getEmployeeById as getEmployeeByIdFromDatabase,
   getEmployeeByChatId as getEmployeeByChatIdFromDatabase,
   getEmployees as getEmployeesFromDatabase,
@@ -500,6 +504,70 @@ app.get("/stores", async (_request, response) => {
   response.json(nextStores);
 });
 
+app.get("/delivery-batches", async (request, response) => {
+  if (!databaseEnabled) {
+    response.status(501).json({ ok: false, message: "Delivery batches require database mode" });
+    return;
+  }
+
+  const storeId =
+    typeof request.query.storeId === "string" ? request.query.storeId.trim() : undefined;
+  const batches = await getDeliveryBatchesFromDatabase(storeId || undefined);
+  response.json(batches);
+});
+
+app.get("/delivery-batches/current", async (request, response) => {
+  if (!databaseEnabled) {
+    response.status(501).json({ ok: false, message: "Delivery batches require database mode" });
+    return;
+  }
+
+  const storeId = typeof request.query.storeId === "string" ? request.query.storeId.trim() : "";
+  if (!storeId) {
+    response.status(400).json({ ok: false, message: "storeId is required" });
+    return;
+  }
+
+  const batch = await getCurrentOpenDeliveryBatchFromDatabase(storeId);
+  response.json({ ok: true, batch });
+});
+
+app.get("/delivery-batches/:id", async (request, response) => {
+  if (!databaseEnabled) {
+    response.status(501).json({ ok: false, message: "Delivery batches require database mode" });
+    return;
+  }
+
+  const batch = await getDeliveryBatchByIdFromDatabase(request.params.id);
+  if (!batch) {
+    response.status(404).json({ ok: false, message: "Delivery batch not found" });
+    return;
+  }
+
+  response.json(batch);
+});
+
+app.post("/delivery-batches/current/close", async (request, response) => {
+  if (!databaseEnabled) {
+    response.status(501).json({ ok: false, message: "Delivery batches require database mode" });
+    return;
+  }
+
+  const { storeId } = request.body as { storeId?: string };
+  if (!String(storeId ?? "").trim()) {
+    response.status(400).json({ ok: false, message: "storeId is required" });
+    return;
+  }
+
+  const batch = await closeCurrentDeliveryBatchInDatabase(String(storeId).trim());
+  if (!batch) {
+    response.status(404).json({ ok: false, message: "Open delivery batch not found" });
+    return;
+  }
+
+  response.json({ ok: true, batch });
+});
+
 app.get("/employees/by-chat/:chatId", async (request, response) => {
   const employee = databaseEnabled
     ? await getEmployeeByChatIdFromDatabase(request.params.chatId)
@@ -802,6 +870,7 @@ if (webDistPath) {
     if (request.path.startsWith("/products")) return next();
     if (request.path.startsWith("/employees")) return next();
     if (request.path.startsWith("/stores")) return next();
+    if (request.path.startsWith("/delivery-batches")) return next();
     if (request.path.startsWith("/telegram")) return next();
     if (request.path.startsWith("/notification-settings")) return next();
     if (request.path.startsWith("/health")) return next();

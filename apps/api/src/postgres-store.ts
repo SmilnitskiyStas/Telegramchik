@@ -1,6 +1,6 @@
-import { NotificationSettings } from "./notification-settings.js";
+﻿import { NotificationSettings } from "./notification-settings.js";
 import { TelegramState } from "./telegram-state.js";
-import { Product, ProductStatus } from "./types.js";
+import { DeliveryBatch, Product, ProductStatus } from "./types.js";
 import { query } from "./db.js";
 
 type StoreRow = {
@@ -37,6 +37,9 @@ type EmployeeRow = {
 type ProductRow = {
   id: number;
   product_id: number;
+  delivery_batch_id: number | null;
+  delivery_batch_label: string | null;
+  delivery_batch_number: number | null;
   name: string;
   category: string;
   barcode: string;
@@ -67,6 +70,20 @@ type TelegramStateRow = {
 
 type CreatedProductRow = ProductRow;
 
+type DeliveryBatchSummaryRow = {
+  id: number;
+  store_id: number;
+  store_name: string;
+  delivery_date: string;
+  batch_number: number;
+  status: "open" | "closed";
+  label: string;
+  created_by_user_id: number | null;
+  created_by_full_name: string | null;
+  created_at: string;
+  closed_at: string | null;
+};
+
 export type EmployeeRecord = {
   id: string;
   name: string;
@@ -76,7 +93,7 @@ export type EmployeeRecord = {
   storeId: string;
   storeName: string;
   telegramClientId: string;
-  status: "на зміні" | "вихідний" | "відсутній";
+  status: "\u043d\u0430 \u0437\u043c\u0456\u043d\u0456" | "\u0432\u0438\u0445\u0456\u0434\u043d\u0438\u0439" | "\u0432\u0456\u0434\u0441\u0443\u0442\u043d\u0456\u0439";
   lastActivityAt: string;
   lastAction: string;
   activityLog: EmployeeActivity[];
@@ -106,9 +123,9 @@ function parseActivityLog(raw: EmployeeRow["activity_log"]) {
 }
 
 function mapEmployeeStatus(status: string): EmployeeRecord["status"] {
-  if (status === "вихідний") return "вихідний";
-  if (status === "відсутній") return "відсутній";
-  return "на зміні";
+  if (status === "\u0432\u0438\u0445\u0456\u0434\u043d\u0438\u0439") return "\u0432\u0438\u0445\u0456\u0434\u043d\u0438\u0439";
+  if (status === "\u0432\u0456\u0434\u0441\u0443\u0442\u043d\u0456\u0439") return "\u0432\u0456\u0434\u0441\u0443\u0442\u043d\u0456\u0439";
+  return "\u043d\u0430 \u0437\u043c\u0456\u043d\u0456";
 }
 
 function mapStore(row: StoreRow): StoreRecord {
@@ -141,6 +158,9 @@ function mapProduct(row: ProductRow): Product {
   return {
     id: String(row.id),
     productId: String(row.product_id),
+    deliveryBatchId: row.delivery_batch_id ? String(row.delivery_batch_id) : undefined,
+    deliveryBatchLabel: row.delivery_batch_label ?? undefined,
+    deliveryBatchNumber: row.delivery_batch_number ?? undefined,
     name: row.name,
     category: row.category,
     barcode: row.barcode,
@@ -155,6 +175,23 @@ function mapProduct(row: ProductRow): Product {
     notes: row.notes,
     receivedByUserId: row.received_by_user_id ? String(row.received_by_user_id) : "",
     receiverFullName: row.receiver_full_name ?? undefined,
+  };
+}
+
+function mapDeliveryBatch(row: DeliveryBatchSummaryRow, items: Product[]) {
+  return {
+    id: String(row.id),
+    storeId: String(row.store_id),
+    storeName: row.store_name,
+    deliveryDate: row.delivery_date,
+    batchNumber: row.batch_number,
+    status: row.status,
+    label: row.label,
+    createdByUserId: row.created_by_user_id ? String(row.created_by_user_id) : undefined,
+    createdByFullName: row.created_by_full_name ?? undefined,
+    createdAt: row.created_at,
+    closedAt: row.closed_at,
+    items,
   };
 }
 
@@ -241,16 +278,50 @@ export async function registerTelegramUser(input: {
       userId: created.id,
       actionType: "telegram_user_registered",
       storeId: created.storeId,
-      comment: "Автоматична реєстрація користувача через Telegram /start",
+      comment: "\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u043d\u0430 \u0440\u0435\u0454\u0441\u0442\u0440\u0430\u0446\u0456\u044f \u043a\u043e\u0440\u0438\u0441\u0442\u0443\u0432\u0430\u0447\u0430 \u0447\u0435\u0440\u0435\u0437 Telegram /start",
     });
   }
 
   return created;
 }
 
+async function ensureOpenDeliveryBatch(storeId: string, userId: string, receivedAt: string) {
+  const existing = await query<{ id: number }>(
+    `select id
+     from delivery_batches
+     where store_id = $1::bigint
+       and delivery_date = $2::date
+       and status = 'open'::delivery_batch_status
+     order by batch_number desc
+     limit 1`,
+    [Number(storeId), receivedAt],
+  );
+
+  if (existing.rows[0]) {
+    return existing.rows[0].id;
+  }
+
+  const nextNumberResult = await query<{ next_batch_number: number }>(
+    `select coalesce(max(batch_number), 0) + 1 as next_batch_number
+     from delivery_batches
+     where store_id = $1::bigint
+       and delivery_date = $2::date`,
+    [Number(storeId), receivedAt],
+  );
+
+  const created = await query<{ id: number }>(
+    `insert into delivery_batches (store_id, created_by_user_id, delivery_date, batch_number, status)
+     values ($1::bigint, $2::bigint, $3::date, $4::integer, 'open'::delivery_batch_status)
+     returning id`,
+    [Number(storeId), Number(userId), receivedAt, nextNumberResult.rows[0]?.next_batch_number ?? 1],
+  );
+
+  return created.rows[0].id;
+}
+
 export async function getProducts() {
   const result = await query<ProductRow>(
-    `select id, product_id, name, category, barcode, image_url, batch, store_id, store_name, quantity, received_at, expires_at, status, notes, received_by_user_id, receiver_full_name
+    `select id, product_id, delivery_batch_id, delivery_batch_label, delivery_batch_number, name, category, barcode, image_url, batch, store_id, store_name, quantity, received_at, expires_at, status, notes, received_by_user_id, receiver_full_name
      from api_products_v
      order by expires_at asc, id asc`,
   );
@@ -259,7 +330,7 @@ export async function getProducts() {
 
 export async function getProductByBatchId(batchId: string) {
   const result = await query<ProductRow>(
-    `select id, product_id, name, category, barcode, image_url, batch, store_id, store_name, quantity, received_at, expires_at, status, notes, received_by_user_id, receiver_full_name
+    `select id, product_id, delivery_batch_id, delivery_batch_label, delivery_batch_number, name, category, barcode, image_url, batch, store_id, store_name, quantity, received_at, expires_at, status, notes, received_by_user_id, receiver_full_name
      from api_products_v
      where id = $1
      limit 1`,
@@ -280,6 +351,12 @@ export async function createProduct(input: {
   notes: string;
   receivedByUserId: string;
 }) {
+  const deliveryBatchId = await ensureOpenDeliveryBatch(
+    input.storeId,
+    input.receivedByUserId,
+    input.receivedAt,
+  );
+
   const result = await query<CreatedProductRow>(
     `with upsert_product as (
        insert into products (article, barcode, product_name, units_of_measurement, category)
@@ -301,6 +378,7 @@ export async function createProduct(input: {
        insert into product_batches (
          product_id,
          store_id,
+         delivery_batch_id,
          quantity,
          expiry_date,
          delivery_date,
@@ -311,29 +389,32 @@ export async function createProduct(input: {
        select
          cp.id,
          $5::bigint,
-         $6::integer,
-         $7::date,
+         $6::bigint,
+         $7::integer,
          $8::date,
-         $9,
-         $10::bigint,
-         $10::bigint
+         $9::date,
+         $10,
+         $11::bigint,
+         $11::bigint
        from chosen_product cp
        on conflict (product_id, store_id, expiry_date) do update
-       set quantity = excluded.quantity,
+       set delivery_batch_id = excluded.delivery_batch_id,
+           quantity = excluded.quantity,
            delivery_date = excluded.delivery_date,
            intake_note = excluded.intake_note,
            updated_by_user_id = excluded.updated_by_user_id
        returning id
      )
-     select id, product_id, name, category, barcode, image_url, batch, store_id, store_name, quantity, received_at, expires_at, status, notes, received_by_user_id, receiver_full_name
+     select id, product_id, delivery_batch_id, delivery_batch_label, delivery_batch_number, name, category, barcode, image_url, batch, store_id, store_name, quantity, received_at, expires_at, status, notes, received_by_user_id, receiver_full_name
      from api_products_v
      where id = (select id from upsert_batch)`,
     [
       input.barcode.trim() || input.name.trim(),
       input.barcode.trim(),
       input.name.trim(),
-      input.category.trim() || "Без категорії",
+      input.category.trim() || "\u0411\u0435\u0437 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0456\u0457",
       Number(input.storeId),
+      deliveryBatchId,
       Number(input.quantity),
       input.expiresAt,
       input.receivedAt,
@@ -348,25 +429,140 @@ export async function createProduct(input: {
     batchId: result.rows[0]?.id ? String(result.rows[0].id) : null,
     productId: result.rows[0]?.product_id ? String(result.rows[0].product_id) : null,
     storeId: input.storeId,
-    comment: `Додав нову партію товару: ${input.name.trim()}`,
+    comment: `\u0414\u043e\u0434\u0430\u0432 \u043d\u043e\u0432\u0443 \u043f\u0430\u0440\u0442\u0456\u044e \u0442\u043e\u0432\u0430\u0440\u0443: ${input.name.trim()}`,
   });
 
   return mapProduct(result.rows[0]);
 }
 
+export async function getDeliveryBatches(storeId?: string): Promise<DeliveryBatch[]> {
+  const result = await query<DeliveryBatchSummaryRow>(
+    `select
+       db.id,
+       db.store_id,
+       coalesce(s.store_name, s.store_code) as store_name,
+       to_char(db.delivery_date, 'YYYY-MM-DD') as delivery_date,
+       db.batch_number,
+       db.status,
+       concat(to_char(db.delivery_date, 'YYYY-MM-DD'), ' / \u2116', db.batch_number) as label,
+       db.created_by_user_id,
+       concat_ws(' ', u.name, u.surname) as created_by_full_name,
+       to_char(db.created_at at time zone 'utc', 'YYYY-MM-DD HH24:MI') as created_at,
+       case
+         when db.closed_at is null then null
+         else to_char(db.closed_at at time zone 'utc', 'YYYY-MM-DD HH24:MI')
+       end as closed_at
+     from delivery_batches db
+     join stores s on s.id = db.store_id
+     left join users u on u.id = db.created_by_user_id
+     where ($1::bigint is null or db.store_id = $1::bigint)
+     order by db.delivery_date desc, db.batch_number desc, db.id desc`,
+    [storeId ? Number(storeId) : null],
+  );
+
+  const products = await getProducts();
+
+  return result.rows.map((row) =>
+    mapDeliveryBatch(
+      row,
+      products.filter((item) => item.deliveryBatchId === String(row.id)),
+    ),
+  );
+}
+
+export async function getDeliveryBatchById(id: string): Promise<DeliveryBatch | null> {
+  const result = await query<DeliveryBatchSummaryRow>(
+    `select
+       db.id,
+       db.store_id,
+       coalesce(s.store_name, s.store_code) as store_name,
+       to_char(db.delivery_date, 'YYYY-MM-DD') as delivery_date,
+       db.batch_number,
+       db.status,
+       concat(to_char(db.delivery_date, 'YYYY-MM-DD'), ' / \u2116', db.batch_number) as label,
+       db.created_by_user_id,
+       concat_ws(' ', u.name, u.surname) as created_by_full_name,
+       to_char(db.created_at at time zone 'utc', 'YYYY-MM-DD HH24:MI') as created_at,
+       case
+         when db.closed_at is null then null
+         else to_char(db.closed_at at time zone 'utc', 'YYYY-MM-DD HH24:MI')
+       end as closed_at
+     from delivery_batches db
+     join stores s on s.id = db.store_id
+     left join users u on u.id = db.created_by_user_id
+     where db.id = $1::bigint
+     limit 1`,
+    [Number(id)],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  const products = await getProducts();
+
+  return mapDeliveryBatch(
+    result.rows[0],
+    products.filter((item) => item.deliveryBatchId === String(result.rows[0].id)),
+  );
+}
+
+export async function getCurrentOpenDeliveryBatch(storeId: string): Promise<DeliveryBatch | null> {
+  const result = await query<{ id: number }>(
+    `select id
+     from delivery_batches
+     where store_id = $1::bigint
+       and status = 'open'::delivery_batch_status
+     order by delivery_date desc, batch_number desc
+     limit 1`,
+    [Number(storeId)],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  return getDeliveryBatchById(String(result.rows[0].id));
+}
+
+export async function closeCurrentDeliveryBatch(storeId: string): Promise<DeliveryBatch | null> {
+  const result = await query<{ id: number }>(
+    `update delivery_batches
+     set status = 'closed'::delivery_batch_status,
+         closed_at = timezone('utc', now()),
+         updated_at = timezone('utc', now())
+     where id = (
+       select id
+       from delivery_batches
+       where store_id = $1::bigint
+         and status = 'open'::delivery_batch_status
+       order by delivery_date desc, batch_number desc
+       limit 1
+     )
+     returning id`,
+    [Number(storeId)],
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  return getDeliveryBatchById(String(result.rows[0].id));
+}
+
 function mapUiStatusToCheckStatus(status: ProductStatus) {
   switch (status) {
-    case "перевірити":
+    case "\u043f\u0435\u0440\u0435\u0432\u0456\u0440\u0438\u0442\u0438":
       return "pending";
-    case "в роботі":
+    case "\u0432 \u0440\u043e\u0431\u043e\u0442\u0456":
       return "reviewed";
-    case "на погодженні":
+    case "\u043d\u0430 \u043f\u043e\u0433\u043e\u0434\u0436\u0435\u043d\u043d\u0456":
       return "discussion_required";
-    case "вирішено":
+    case "\u0432\u0438\u0440\u0456\u0448\u0435\u043d\u043e":
       return "completed";
-    case "списано":
+    case "\u0441\u043f\u0438\u0441\u0430\u043d\u043e":
       return "overdue";
-    case "нове":
+    case "\u043d\u043e\u0432\u0435":
     default:
       return "new";
   }
@@ -396,7 +592,7 @@ export async function updateProductStatus(batchId: string, status: ProductStatus
       batchId,
       productId: current.productId,
       storeId: current.storeId,
-      comment: `Оновив статус товару "${current.name}" на "${status}"`,
+      comment: `\u041e\u043d\u043e\u0432\u0438\u0432 \u0441\u0442\u0430\u0442\u0443\u0441 \u0442\u043e\u0432\u0430\u0440\u0443 "${current.name}" \u043d\u0430 "${status}"`,
     });
   }
 

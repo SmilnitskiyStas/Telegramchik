@@ -16,6 +16,7 @@ create type action_taken as enum (
   'not_found',
   'other'
 );
+create type delivery_batch_status as enum ('open', 'closed');
 
 create or replace function set_updated_at()
 returns trigger
@@ -61,10 +62,24 @@ create table if not exists products (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists delivery_batches (
+  id bigserial primary key,
+  store_id bigint not null references stores(id) on update cascade on delete restrict,
+  created_by_user_id bigint references users(id) on update cascade on delete set null,
+  delivery_date date not null,
+  batch_number integer not null check (batch_number >= 1),
+  status delivery_batch_status not null default 'open',
+  closed_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (store_id, delivery_date, batch_number)
+);
+
 create table if not exists product_batches (
   id bigserial primary key,
   product_id bigint not null references products(id) on update cascade on delete restrict,
   store_id bigint not null references stores(id) on update cascade on delete restrict,
+  delivery_batch_id bigint references delivery_batches(id) on update cascade on delete set null,
   quantity integer not null check (quantity >= 0),
   expiry_date date not null,
   delivery_date date,
@@ -154,6 +169,8 @@ create table if not exists telegram_bot_state (
 create index if not exists idx_users_store_id on users(store_id);
 create index if not exists idx_products_article on products(article);
 create index if not exists idx_products_category on products(category);
+create index if not exists idx_delivery_batches_store_date on delivery_batches(store_id, delivery_date, batch_number);
+create index if not exists idx_delivery_batches_status on delivery_batches(status);
 create index if not exists idx_product_batches_store_status on product_batches(store_id, check_status);
 create index if not exists idx_product_batches_expiry_date on product_batches(expiry_date);
 create index if not exists idx_product_batches_notified on product_batches(notified, notified_days);
@@ -172,6 +189,8 @@ drop trigger if exists trg_users_set_updated_at on users;
 create trigger trg_users_set_updated_at before update on users for each row execute function set_updated_at();
 drop trigger if exists trg_products_set_updated_at on products;
 create trigger trg_products_set_updated_at before update on products for each row execute function set_updated_at();
+drop trigger if exists trg_delivery_batches_set_updated_at on delivery_batches;
+create trigger trg_delivery_batches_set_updated_at before update on delivery_batches for each row execute function set_updated_at();
 drop trigger if exists trg_product_batches_set_updated_at on product_batches;
 create trigger trg_product_batches_set_updated_at before update on product_batches for each row execute function set_updated_at();
 drop trigger if exists trg_user_sessions_set_updated_at on user_sessions;
@@ -247,6 +266,7 @@ create or replace view api_products_v as
 select
   pb.id,
   p.id as product_id,
+  pb.delivery_batch_id,
   p.product_name as name,
   p.category,
   p.barcode,
@@ -267,11 +287,17 @@ select
   end as status,
   coalesce(pb.intake_note, pb.action_note, '') as notes,
   coalesce(pb.checked_by_user_id, pb.created_by_user_id, pb.updated_by_user_id) as received_by_user_id,
-  concat_ws(' ', ru.name, ru.surname) as receiver_full_name
+  concat_ws(' ', ru.name, ru.surname) as receiver_full_name,
+  case
+    when db.id is null then null
+    else concat(to_char(db.delivery_date, 'YYYY-MM-DD'), ' / №', db.batch_number)
+  end as delivery_batch_label,
+  db.batch_number as delivery_batch_number
 from product_batches pb
 join products p on p.id = pb.product_id
 join stores s on s.id = pb.store_id
-left join users ru on ru.id = coalesce(pb.checked_by_user_id, pb.created_by_user_id, pb.updated_by_user_id);
+left join users ru on ru.id = coalesce(pb.checked_by_user_id, pb.created_by_user_id, pb.updated_by_user_id)
+left join delivery_batches db on db.id = pb.delivery_batch_id;
 
 create or replace function ui_status_to_check_status(p_status text)
 returns check_status
