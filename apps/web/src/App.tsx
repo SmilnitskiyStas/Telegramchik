@@ -154,6 +154,8 @@ export function App() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [employeeInfoModalId, setEmployeeInfoModalId] = useState<string | null>(null);
   const [employeeActionsModalId, setEmployeeActionsModalId] = useState<string | null>(null);
+  const [employeeActionsQuery, setEmployeeActionsQuery] = useState("");
+  const [employeeActionsFilter, setEmployeeActionsFilter] = useState<"all" | "products" | "other">("all");
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(
     new URLSearchParams(window.location.search).get("productId"),
@@ -628,6 +630,33 @@ export function App() {
     () => employees.find((employee) => employee.id === employeeActionsModalId) ?? null,
     [employeeActionsModalId, employees],
   );
+
+  const filteredEmployeeActions = useMemo(() => {
+    if (!employeeActionsModalEmployee) {
+      return [];
+    }
+
+    return employeeActionsModalEmployee.activityLog.filter((activity) => {
+      const actionText = activity.action.toLowerCase();
+      const matchesQuery =
+        !employeeActionsQuery.trim() ||
+        actionText.includes(employeeActionsQuery.trim().toLowerCase()) ||
+        activity.at.toLowerCase().includes(employeeActionsQuery.trim().toLowerCase());
+
+      const looksLikeProductAction =
+        actionText.includes("товар") ||
+        actionText.includes("парт") ||
+        actionText.includes("штрих") ||
+        actionText.includes("прийм");
+
+      const matchesFilter =
+        employeeActionsFilter === "all" ||
+        (employeeActionsFilter === "products" && looksLikeProductAction) ||
+        (employeeActionsFilter === "other" && !looksLikeProductAction);
+
+      return matchesQuery && matchesFilter;
+    });
+  }, [employeeActionsFilter, employeeActionsModalEmployee, employeeActionsQuery]);
 
   useEffect(() => {
     if (!selectedGroup?.batches.length) {
@@ -1728,20 +1757,56 @@ export function App() {
         )}
         {employeeActionsModalEmployee && (
           <div className="modalOverlay" onClick={() => setEmployeeActionsModalId(null)}>
-            <div className="modalCard" onClick={(event) => event.stopPropagation()}>
-              <div className="receiveHeader">
-                <h2>Дії співробітника</h2>
+            <div className="modalCard employeeActionsModal" onClick={(event) => event.stopPropagation()}>
+              <div className="receiveHeader employeeModalHeader">
+                <div className="employeeModalTitleBlock">
+                  <p className="eyebrow">Журнал</p>
+                  <h2>Дії співробітника</h2>
+                </div>
                 <button type="button" className="ghostButton" onClick={() => setEmployeeActionsModalId(null)}>
                   Закрити
                 </button>
               </div>
               <div className="employeeActivityBlock employeeActivityBlockStandalone">
-                <div className="employeeMetaGrid">
+                <div className="employeeInfoSummary employeeActionsSummary">
+                  <article className="employeeInfoCard">
+                    <span className="employeeInfoLabel">Співробітник</span>
+                    <strong>{employeeActionsModalEmployee.fullName}</strong>
+                    <span className="employeeInfoMuted">{employeeActionsModalEmployee.storeName}</span>
+                  </article>
+                  <article className="employeeInfoCard">
+                    <span className="employeeInfoLabel">Усього дій</span>
+                    <strong>{employeeActionsModalEmployee.activityLog.length}</strong>
+                    <span className="employeeInfoMuted">Після фільтрації: {filteredEmployeeActions.length}</span>
+                  </article>
+                </div>
+                <div className="employeeActionsToolbar">
+                  <label className="fieldBlock employeeActionsSearch">
+                    <span className="fieldLabel">Пошук по діях</span>
+                    <input
+                      placeholder="Наприклад: товар, партія, Telegram"
+                      value={employeeActionsQuery}
+                      onChange={(event) => setEmployeeActionsQuery(event.target.value)}
+                    />
+                  </label>
+                  <div className="filters employeeActionsFilters">
+                    <button type="button" className={employeeActionsFilter === "all" ? "active" : ""} onClick={() => setEmployeeActionsFilter("all")}>
+                      Усі
+                    </button>
+                    <button type="button" className={employeeActionsFilter === "products" ? "active" : ""} onClick={() => setEmployeeActionsFilter("products")}>
+                      Товари / партії
+                    </button>
+                    <button type="button" className={employeeActionsFilter === "other" ? "active" : ""} onClick={() => setEmployeeActionsFilter("other")}>
+                      Інше
+                    </button>
+                  </div>
+                </div>
+                <div className="employeeMetaGrid employeeActionsMeta">
                   <p><strong>Співробітник:</strong> {employeeActionsModalEmployee.fullName}</p>
                   <p><strong>Магазин:</strong> {employeeActionsModalEmployee.storeName}</p>
                 </div>
                 <div className="employeeActivityList">
-                  {employeeActionsModalEmployee.activityLog.map((activity, index) => (
+                  {filteredEmployeeActions.map((activity, index) => (
                     <article key={`${activity.at}-${index}`} className="employeeActivityItem">
                       <strong>{activity.at}</strong>
                       <p>{activity.action}</p>
@@ -1749,6 +1814,9 @@ export function App() {
                   ))}
                   {!employeeActionsModalEmployee.activityLog.length && (
                     <p className="settingsHint">Для цього співробітника ще немає журналу дій.</p>
+                  )}
+                  {!!employeeActionsModalEmployee.activityLog.length && !filteredEmployeeActions.length && (
+                    <p className="settingsHint">За поточним фільтром нічого не знайдено.</p>
                   )}
                 </div>
               </div>

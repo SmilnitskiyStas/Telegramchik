@@ -601,6 +601,11 @@ label {
   min-width: 190px;
 }
 
+.employeeModalActions button[type="submit"] {
+  background: linear-gradient(135deg, #bf5a36 0%, #a9492b 100%);
+  box-shadow: 0 14px 28px rgba(191, 90, 54, 0.22);
+}
+
 .employeeModalActions .ghostButton {
   background: #edf2f5;
 }
@@ -832,6 +837,34 @@ label {
   border-top: 0;
 }
 
+.employeeActionsModal {
+  width: min(1040px, 100%);
+}
+
+.employeeActionsSummary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.employeeActionsToolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.2fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.employeeActionsSearch input {
+  min-height: 46px;
+  margin-top: 0;
+}
+
+.employeeActionsFilters {
+  justify-content: flex-end;
+}
+
+.employeeActionsMeta {
+  gap: 4px;
+}
+
 .employeeActivityBlock h3 {
   margin: 0;
 }
@@ -839,10 +872,15 @@ label {
 .employeeActivityList {
   display: grid;
   gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .employeeActivityItem {
-  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
   border-radius: 14px;
   background: #f7fafc;
   border: 1px solid rgba(23, 50, 77, 0.08);
@@ -850,8 +888,8 @@ label {
 
 .employeeActivityItem strong {
   display: block;
-  margin-bottom: 6px;
   color: #17324d;
+  font-size: 0.92rem;
 }
 
 .employeeActivityItem p {
@@ -1434,8 +1472,20 @@ label {
     grid-template-columns: 1fr;
   }
 
+  .employeeActionsSummary {
+    grid-template-columns: 1fr;
+  }
+
   .employeeMetaGridWide {
     grid-template-columns: 1fr;
+  }
+
+  .employeeActionsToolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .employeeActionsFilters {
+    justify-content: flex-start;
   }
 
   .layoutShelfSlotCard {
