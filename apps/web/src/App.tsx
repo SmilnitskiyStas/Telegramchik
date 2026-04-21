@@ -1638,15 +1638,44 @@ export function App() {
         })}
         {employeeInfoModalEmployee && (
           <div className="modalOverlay" onClick={() => setEmployeeInfoModalId(null)}>
-            <div className="modalCard" onClick={(event) => event.stopPropagation()}>
-              <div className="receiveHeader">
-                <h2>Інформація про співробітника</h2>
+            <div className="modalCard employeeInfoModal" onClick={(event) => event.stopPropagation()}>
+              <div className="receiveHeader employeeModalHeader">
+                <div className="employeeModalTitleBlock">
+                  <p className="eyebrow">Користувач</p>
+                  <h2>Інформація про співробітника</h2>
+                </div>
                 <button type="button" className="ghostButton" onClick={() => setEmployeeInfoModalId(null)}>
                   Закрити
                 </button>
               </div>
+              <section className="employeeInfoSummary">
+                <article className="employeeInfoCard">
+                  <span className="employeeInfoLabel">Співробітник</span>
+                  <strong>{employeeInfoModalEmployee.fullName}</strong>
+                  <span className="employeeInfoMuted">ID: {employeeInfoModalEmployee.id}</span>
+                </article>
+                <article className="employeeInfoCard">
+                  <span className="employeeInfoLabel">Магазин</span>
+                  <strong>{employeeInfoModalEmployee.storeName || "—"}</strong>
+                  <span className="employeeInfoMuted">Telegram: {employeeInfoModalEmployee.telegramClientId || "—"}</span>
+                </article>
+                <article className="employeeInfoCard">
+                  <span className="employeeInfoLabel">Статус</span>
+                  <strong>
+                    <span className={`statusBadge employee-status-${employeeInfoModalEmployee.status}`}>
+                      {employeeInfoModalEmployee.status}
+                    </span>
+                  </strong>
+                  <span className="employeeInfoMuted">Остання активність: {employeeInfoModalEmployee.lastActivityAt}</span>
+                </article>
+              </section>
               <form className="employeeDetails" onSubmit={handleUpdateEmployee}>
-                <div className="employeeMetaGrid">
+                <div className="employeeModalFormCard">
+                  <div className="employeeModalSectionHeader">
+                    <h3>Редагування профілю</h3>
+                    <p>Оновіть основні дані, магазин, роль і Telegram-ідентифікатор користувача.</p>
+                  </div>
+                  <div className="employeeMetaGrid employeeMetaGridWide">
                   <label className="fieldBlock">
                     <span className="fieldLabel">Ім'я</span>
                     <input value={employeeEditForm.name} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, name: event.target.value }))} />
@@ -1684,9 +1713,15 @@ export function App() {
                   <p><strong>Остання активність:</strong> {employeeInfoModalEmployee.lastActivityAt}</p>
                   <p className="employeeLastAction"><strong>Остання дія:</strong> {employeeInfoModalEmployee.lastAction}</p>
                 </div>
-                <button type="submit" disabled={savingEmployee}>
-                  {savingEmployee ? "Збереження..." : "Зберегти користувача"}
-                </button>
+                </div>
+                <div className="receiveActions">
+                  <button type="submit" disabled={savingEmployee}>
+                    {savingEmployee ? "Збереження..." : "Зберегти користувача"}
+                  </button>
+                  <button type="button" className="ghostButton" onClick={() => setEmployeeInfoModalId(null)}>
+                    Скасувати
+                  </button>
+                </div>
               </form>
             </div>
           </div>

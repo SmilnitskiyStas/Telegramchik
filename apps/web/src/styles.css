@@ -477,6 +477,82 @@ label {
   gap: 18px;
 }
 
+.employeeInfoModal {
+  width: min(980px, 100%);
+  gap: 20px;
+}
+
+.employeeModalHeader {
+  margin-bottom: 0;
+}
+
+.employeeModalTitleBlock {
+  display: grid;
+  gap: 6px;
+}
+
+.employeeModalTitleBlock .eyebrow {
+  color: #8a97a8;
+}
+
+.employeeInfoSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.employeeInfoCard {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 50, 77, 0.08);
+  background: linear-gradient(180deg, #fbfcfd 0%, #f2f6f9 100%);
+}
+
+.employeeInfoCard strong {
+  font-size: 1.05rem;
+  color: #172033;
+}
+
+.employeeInfoLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7a8c;
+}
+
+.employeeInfoMuted {
+  color: #5f6d80;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.employeeModalFormCard {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(23, 50, 77, 0.08);
+  background: #f8fafb;
+}
+
+.employeeModalSectionHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.employeeModalSectionHeader h3,
+.employeeModalSectionHeader p {
+  margin: 0;
+}
+
+.employeeModalSectionHeader p {
+  color: #5f6d80;
+  line-height: 1.45;
+}
+
 .status {
   color: #bf5a36;
   font-weight: 600;
@@ -679,6 +755,11 @@ label {
 .employeeMetaGrid {
   display: grid;
   gap: 6px;
+}
+
+.employeeMetaGridWide {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .employeeMetaGrid p,
@@ -1294,6 +1375,14 @@ label {
   }
 
   .layoutEditorGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .employeeInfoSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .employeeMetaGridWide {
     grid-template-columns: 1fr;
   }
 
