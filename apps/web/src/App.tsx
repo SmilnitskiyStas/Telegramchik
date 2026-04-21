@@ -1714,7 +1714,7 @@ export function App() {
                   <p className="employeeLastAction"><strong>Остання дія:</strong> {employeeInfoModalEmployee.lastAction}</p>
                 </div>
                 </div>
-                <div className="receiveActions">
+                <div className="receiveActions employeeModalActions">
                   <button type="submit" disabled={savingEmployee}>
                     {savingEmployee ? "Збереження..." : "Зберегти користувача"}
                   </button>
