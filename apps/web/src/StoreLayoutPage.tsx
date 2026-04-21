@@ -932,23 +932,8 @@ export function StoreLayoutPage({ onBack, products }: Props) {
   }
 
   return (
-    <div className="page receivePage">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Grid System</p>
-          <h1>Конструктор карти магазину</h1>
-          <p className="heroText">
-            Другий інкремент модуля: сітка вже містить не клітинки зі станом, а
-            прямокутні об&apos;єкти з координатами, розмірами та базовими параметрами.
-          </p>
-          <div className="heroActions">
-            <button type="button" className="lightButton" onClick={onBack}>
-              Повернутись до dashboard
-            </button>
-          </div>
-        </div>
-      </section>
-
+    <div className="receivePage">
+      
       <section className="summaryGrid">
         <article className="summaryCard neutral">
           <span className="summaryLabel">Стелажі</span>
