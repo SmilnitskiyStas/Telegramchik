@@ -1600,20 +1600,19 @@ export function App() {
     title: string;
     text: string;
     content: React.ReactNode;
-    compact?: boolean;
   }) {
     return (
       <div className="page receivePage">
-        <section className={`hero ${input.compact ? "heroCompact" : ""}`}>
-          <div>
-            <p className="eyebrow">{input.eyebrow}</p>
-            <h1>{input.title}</h1>
-            <p className="heroText">{input.text}</p>
-          </div>
-        </section>
         <section className="appShell">
           {renderSidebar()}
-          <div className="pageSectionContent">{input.content}</div>
+          <div className="pageSectionContent">
+            <section className="panel pageIntro">
+              <p className="eyebrow">{input.eyebrow}</p>
+              <h1>{input.title}</h1>
+              <p className="pageIntroText">{input.text}</p>
+            </section>
+            {input.content}
+          </div>
         </section>
       </div>
     );
@@ -1624,7 +1623,6 @@ export function App() {
       eyebrow: "Приймання партії",
       title: "Додати новий товар у систему",
       text: "Цю форму можна відкривати прямо з Telegram-команди. Для бота використовуйте `/newproduct` або `/addproduct`.",
-      compact: true,
       content: (
         <div className="receiveLayout">
           <div className="panel receivePanel">
@@ -1644,7 +1642,6 @@ export function App() {
       eyebrow: "Реєстрація",
       title: "Завершення реєстрації користувача",
       text: "Оберіть магазин і заповніть свої дані, щоб надалі працювати з товарами через Telegram та web-інтерфейс.",
-      compact: true,
       content: registrationContent,
     });
   }
