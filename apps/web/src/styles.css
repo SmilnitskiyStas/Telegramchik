@@ -633,7 +633,7 @@ label {
 .employeeTableHead,
 .employeeRow {
   display: grid;
-  grid-template-columns: minmax(120px, 1.1fr) minmax(110px, 0.95fr) minmax(120px, 1.05fr) 110px 92px minmax(180px, 1.7fr);
+  grid-template-columns: minmax(120px, 1.05fr) minmax(110px, 0.8fr) minmax(120px, 1fr) 110px 92px minmax(200px, 1.5fr) 120px 100px;
   gap: 10px;
   align-items: center;
   padding: 12px 14px;
@@ -650,11 +650,8 @@ label {
 
 .employeeRow {
   width: 100%;
-  text-align: left;
   background: transparent;
-  border: 0;
   border-top: 1px solid rgba(23, 50, 77, 0.06);
-  cursor: pointer;
 }
 
 .employeeRow:hover {
@@ -672,13 +669,6 @@ label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.employeeDetailsPanel {
-  display: grid;
-  gap: 12px;
-  align-self: start;
-  min-width: 0;
 }
 
 .employeeDetails {
@@ -702,6 +692,11 @@ label {
   gap: 10px;
   padding-top: 12px;
   border-top: 1px solid rgba(23, 50, 77, 0.08);
+}
+
+.employeeActivityBlockStandalone {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .employeeActivityBlock h3 {
@@ -730,6 +725,11 @@ label {
   margin: 0;
   color: #4d5b6f;
   line-height: 1.45;
+}
+
+.employeeRowAction {
+  width: 100%;
+  padding: 8px 10px;
 }
 
 .employee-status-на\ зміні {

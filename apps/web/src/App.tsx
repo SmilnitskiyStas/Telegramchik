@@ -152,6 +152,8 @@ export function App() {
   const [stores, setStores] = useState<Store[]>([]);
   const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [employeeInfoModalId, setEmployeeInfoModalId] = useState<string | null>(null);
+  const [employeeActionsModalId, setEmployeeActionsModalId] = useState<string | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(
     new URLSearchParams(window.location.search).get("productId"),
@@ -616,6 +618,16 @@ export function App() {
 
     return groupedProducts.find((group) => group.productId === selectedProduct.productId) ?? null;
   }, [groupedProducts, selectedProduct]);
+
+  const employeeInfoModalEmployee = useMemo(
+    () => employees.find((employee) => employee.id === employeeInfoModalId) ?? null,
+    [employeeInfoModalId, employees],
+  );
+
+  const employeeActionsModalEmployee = useMemo(
+    () => employees.find((employee) => employee.id === employeeActionsModalId) ?? null,
+    [employeeActionsModalId, employees],
+  );
 
   useEffect(() => {
     if (!selectedGroup?.batches.length) {
@@ -1265,7 +1277,6 @@ export function App() {
 
   const employeesContent = (
     <section className="panel employeesShell">
-      <div className="employeesPageGrid">
       <section className="employeesPanel">
         <div className="employeeTableWrap">
           <div className="employeeTable">
@@ -1276,13 +1287,13 @@ export function App() {
               <span>Telegram ID</span>
               <span>Статус</span>
               <span>Остання дія</span>
+              <span>Інформація</span>
+              <span>Дії</span>
             </div>
             {employees.map((employee) => (
-              <button
+              <article
                 key={employee.id}
-                type="button"
                 className={`employeeRow ${selectedEmployee?.id === employee.id ? "selected" : ""}`}
-                onClick={() => setSelectedEmployeeId(employee.id)}
               >
                 <strong>{employee.fullName}</strong>
                 <span>{employee.role}</span>
@@ -1292,74 +1303,35 @@ export function App() {
                   <span className={`statusBadge employee-status-${employee.status}`}>{employee.status}</span>
                 </span>
                 <span>{employee.lastActivityAt} · {employee.lastAction}</span>
-              </button>
+                <span>
+                  <button
+                    type="button"
+                    className="ghostButton employeeRowAction"
+                    onClick={() => {
+                      setSelectedEmployeeId(employee.id);
+                      setEmployeeInfoModalId(employee.id);
+                    }}
+                  >
+                    Інформація
+                  </button>
+                </span>
+                <span>
+                  <button
+                    type="button"
+                    className="ghostButton employeeRowAction"
+                    onClick={() => {
+                      setSelectedEmployeeId(employee.id);
+                      setEmployeeActionsModalId(employee.id);
+                    }}
+                  >
+                    Дії
+                  </button>
+                </span>
+              </article>
             ))}
           </div>
         </div>
       </section>
-
-      <aside className="employeeDetailsPanel">
-        <h2>Картка співробітника</h2>
-        {selectedEmployee ? (
-          <form className="employeeDetails" onSubmit={handleUpdateEmployee}>
-            <div className="employeeMetaGrid">
-              <label className="fieldBlock">
-                <span className="fieldLabel">Ім'я</span>
-                <input value={employeeEditForm.name} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, name: event.target.value }))} />
-              </label>
-              <label className="fieldBlock">
-                <span className="fieldLabel">Прізвище</span>
-                <input value={employeeEditForm.surname} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, surname: event.target.value }))} />
-              </label>
-              <label className="fieldBlock">
-                <span className="fieldLabel">Роль</span>
-                <select value={employeeEditForm.role} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, role: event.target.value }))}>
-                  <option value="user">user</option>
-                  <option value="manager">manager</option>
-                  <option value="admin">admin</option>
-                </select>
-              </label>
-              <label className="fieldBlock">
-                <span className="fieldLabel">Магазин</span>
-                <select value={employeeEditForm.storeId} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, storeId: event.target.value }))}>
-                  {stores.map((store) => (
-                    <option key={store.id} value={store.id}>
-                      {store.name} · {store.code}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="fieldBlock">
-                <span className="fieldLabel">Telegram ID</span>
-                <input value={employeeEditForm.telegramClientId} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, telegramClientId: event.target.value }))} />
-              </label>
-              <label className="checkboxRow">
-                <input type="checkbox" checked={employeeEditForm.isActive} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, isActive: event.target.checked }))} />
-                <span>Активний користувач</span>
-              </label>
-              <p><strong>Остання активність:</strong> {selectedEmployee.lastActivityAt}</p>
-              <p className="employeeLastAction"><strong>Остання дія:</strong> {selectedEmployee.lastAction}</p>
-            </div>
-            <button type="submit" disabled={savingEmployee}>
-              {savingEmployee ? "Збереження..." : "Зберегти користувача"}
-            </button>
-            <div className="employeeActivityBlock">
-              <h3>Останні дії</h3>
-              <div className="employeeActivityList">
-                {selectedEmployee.activityLog.map((activity, index) => (
-                  <article key={`${activity.at}-${index}`} className="employeeActivityItem">
-                    <strong>{activity.at}</strong>
-                    <p>{activity.action}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </form>
-        ) : (
-          <p>Оберіть співробітника зі списку.</p>
-        )}
-      </aside>
-      </div>
     </section>
   );
 
@@ -1656,12 +1628,100 @@ export function App() {
   }
 
   if (viewMode === "employees") {
-    return renderPageShell({
-      eyebrow: "Користувачі",
-      title: "Співробітники і магазини",
-      text: "Тут видно, хто де працює, за яким магазином закріплений і коли востаннє виконував дію в системі.",
-      content: employeesContent,
-    });
+    return (
+      <>
+        {renderPageShell({
+          eyebrow: "Користувачі",
+          title: "Співробітники і магазини",
+          text: "Тут видно, хто де працює, за яким магазином закріплений і коли востаннє виконував дію в системі.",
+          content: employeesContent,
+        })}
+        {employeeInfoModalEmployee && (
+          <div className="modalOverlay" onClick={() => setEmployeeInfoModalId(null)}>
+            <div className="modalCard" onClick={(event) => event.stopPropagation()}>
+              <div className="receiveHeader">
+                <h2>Інформація про співробітника</h2>
+                <button type="button" className="ghostButton" onClick={() => setEmployeeInfoModalId(null)}>
+                  Закрити
+                </button>
+              </div>
+              <form className="employeeDetails" onSubmit={handleUpdateEmployee}>
+                <div className="employeeMetaGrid">
+                  <label className="fieldBlock">
+                    <span className="fieldLabel">Ім'я</span>
+                    <input value={employeeEditForm.name} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, name: event.target.value }))} />
+                  </label>
+                  <label className="fieldBlock">
+                    <span className="fieldLabel">Прізвище</span>
+                    <input value={employeeEditForm.surname} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, surname: event.target.value }))} />
+                  </label>
+                  <label className="fieldBlock">
+                    <span className="fieldLabel">Роль</span>
+                    <select value={employeeEditForm.role} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, role: event.target.value }))}>
+                      <option value="user">user</option>
+                      <option value="manager">manager</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </label>
+                  <label className="fieldBlock">
+                    <span className="fieldLabel">Магазин</span>
+                    <select value={employeeEditForm.storeId} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, storeId: event.target.value }))}>
+                      {stores.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.name} · {store.code}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="fieldBlock">
+                    <span className="fieldLabel">Telegram ID</span>
+                    <input value={employeeEditForm.telegramClientId} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, telegramClientId: event.target.value }))} />
+                  </label>
+                  <label className="checkboxRow">
+                    <input type="checkbox" checked={employeeEditForm.isActive} onChange={(event) => setEmployeeEditForm((current) => ({ ...current, isActive: event.target.checked }))} />
+                    <span>Активний користувач</span>
+                  </label>
+                  <p><strong>Остання активність:</strong> {employeeInfoModalEmployee.lastActivityAt}</p>
+                  <p className="employeeLastAction"><strong>Остання дія:</strong> {employeeInfoModalEmployee.lastAction}</p>
+                </div>
+                <button type="submit" disabled={savingEmployee}>
+                  {savingEmployee ? "Збереження..." : "Зберегти користувача"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+        {employeeActionsModalEmployee && (
+          <div className="modalOverlay" onClick={() => setEmployeeActionsModalId(null)}>
+            <div className="modalCard" onClick={(event) => event.stopPropagation()}>
+              <div className="receiveHeader">
+                <h2>Дії співробітника</h2>
+                <button type="button" className="ghostButton" onClick={() => setEmployeeActionsModalId(null)}>
+                  Закрити
+                </button>
+              </div>
+              <div className="employeeActivityBlock employeeActivityBlockStandalone">
+                <div className="employeeMetaGrid">
+                  <p><strong>Співробітник:</strong> {employeeActionsModalEmployee.fullName}</p>
+                  <p><strong>Магазин:</strong> {employeeActionsModalEmployee.storeName}</p>
+                </div>
+                <div className="employeeActivityList">
+                  {employeeActionsModalEmployee.activityLog.map((activity, index) => (
+                    <article key={`${activity.at}-${index}`} className="employeeActivityItem">
+                      <strong>{activity.at}</strong>
+                      <p>{activity.action}</p>
+                    </article>
+                  ))}
+                  {!employeeActionsModalEmployee.activityLog.length && (
+                    <p className="settingsHint">Для цього співробітника ще немає журналу дій.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
   }
 
   if (viewMode === "delivery-batches") {
