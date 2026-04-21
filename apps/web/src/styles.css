@@ -229,11 +229,16 @@ label {
 
 .batchCard {
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  gap: 6px;
+  padding: 12px 14px;
   border-radius: 16px;
   border: 1px solid rgba(23, 50, 77, 0.1);
   background: #f8fbfd;
+}
+
+.batchCard p {
+  margin: 0;
+  line-height: 1.35;
 }
 
 .batchCardSelected {
