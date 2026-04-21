@@ -1744,7 +1744,7 @@ export function App() {
                 </div>
                 </div>
                 <div className="receiveActions employeeModalActions">
-                  <button type="submit" disabled={savingEmployee}>
+                  <button type="submit" className="ghostButton" disabled={savingEmployee}>
                     {savingEmployee ? "Збереження..." : "Зберегти користувача"}
                   </button>
                   <button type="button" className="ghostButton" onClick={() => setEmployeeInfoModalId(null)}>
