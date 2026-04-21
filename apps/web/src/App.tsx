@@ -1601,7 +1601,6 @@ export function App() {
     text: string;
     content: React.ReactNode;
     compact?: boolean;
-    summary?: React.ReactNode;
   }) {
     return (
       <div className="page receivePage">
@@ -1612,7 +1611,6 @@ export function App() {
             <p className="heroText">{input.text}</p>
           </div>
         </section>
-        {input.summary}
         <section className="appShell">
           {renderSidebar()}
           <div className="pageSectionContent">{input.content}</div>
@@ -1737,16 +1735,15 @@ export function App() {
     eyebrow: "TelegramChick",
     title: "Простий тестовий MVP контролю термінів придатності",
     text: "Додавайте товари, контролюйте статуси і перевіряйте сценарій майбутніх Telegram-сповіщень без зайвої складності.",
-    summary: (
-      <section className="summaryGrid">
-        <article className="summaryCard neutral"><span className="summaryLabel">Усього товарів</span><strong className="summaryValue">{summary.total}</strong></article>
-        <article className="summaryCard warning"><span className="summaryLabel">Скоро спливають</span><strong className="summaryValue">{summary.expiring}</strong></article>
-        <article className="summaryCard danger"><span className="summaryLabel">Прострочені</span><strong className="summaryValue">{summary.expired}</strong></article>
-        <article className="summaryCard info"><span className="summaryLabel">В роботі</span><strong className="summaryValue">{summary.inProgress}</strong></article>
-      </section>
-    ),
     content: (
-      <section className="layout">
+      <div className="pageSectionStack">
+        <section className="summaryGrid">
+          <article className="summaryCard neutral"><span className="summaryLabel">Усього товарів</span><strong className="summaryValue">{summary.total}</strong></article>
+          <article className="summaryCard warning"><span className="summaryLabel">Скоро спливають</span><strong className="summaryValue">{summary.expiring}</strong></article>
+          <article className="summaryCard danger"><span className="summaryLabel">Прострочені</span><strong className="summaryValue">{summary.expired}</strong></article>
+          <article className="summaryCard info"><span className="summaryLabel">В роботі</span><strong className="summaryValue">{summary.inProgress}</strong></article>
+        </section>
+        <section className="layout">
             <main className="panel">
               <div className="toolbar">
                 <div className="toolbarTitle">
@@ -1827,7 +1824,8 @@ export function App() {
                 <p>Оберіть товар зі списку.</p>
               )}
             </aside>
-      </section>
+        </section>
+      </div>
     ),
   });
 }

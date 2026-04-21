@@ -10,6 +10,8 @@
 
 body {
   margin: 0;
+  color: #172033;
+  background: linear-gradient(180deg, #f5f1e8 0%, #eef3f7 100%);
 }
 
 button,
@@ -26,20 +28,27 @@ label {
 .page {
   min-height: 100vh;
   width: 100%;
-  padding: 16px;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 .hero {
   width: 100%;
   margin: 0 0 16px;
+  min-height: 176px;
   padding: 28px;
   border-radius: 24px;
   background: linear-gradient(135deg, #17324d 0%, #315d66 100%);
   color: #fff8ee;
+  display: flex;
+  align-items: flex-end;
+  box-shadow: 0 18px 40px rgba(22, 41, 64, 0.14);
 }
 
 .heroCompact {
-  padding: 18px 24px;
+  min-height: 176px;
+  padding: 24px 28px;
 }
 
 .heroCompact h1 {
@@ -79,7 +88,6 @@ label {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
 }
 
 .summaryCard {
@@ -132,7 +140,7 @@ label {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(23, 50, 77, 0.08);
   border-radius: 20px;
-  padding: 16px;
+  padding: 18px;
   box-shadow: 0 10px 30px rgba(22, 41, 64, 0.08);
 }
 
@@ -190,10 +198,18 @@ label {
 .appSidebar {
   position: sticky;
   top: 20px;
+  align-self: start;
 }
 
 .pageSectionContent {
   min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.pageSectionStack {
+  display: grid;
+  gap: 16px;
 }
 
 .menuHintBox {
@@ -334,7 +350,8 @@ label {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  min-height: 48px;
 }
 
 .toolbarTitle {
@@ -764,6 +781,7 @@ label {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+  min-height: 48px;
 }
 
 .receiveHeader h2 {
@@ -1250,6 +1268,10 @@ label {
 }
 
 @media (max-width: 1024px) {
+  .page {
+    padding: 16px;
+  }
+
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1297,6 +1319,12 @@ label {
 }
 
 @media (max-width: 640px) {
+  .hero,
+  .heroCompact {
+    min-height: auto;
+    padding: 20px;
+  }
+
   .summaryGrid {
     grid-template-columns: 1fr;
   }
